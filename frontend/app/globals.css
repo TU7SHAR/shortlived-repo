@@ -1,0 +1,50 @@
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #0a1628;
+  --color-navy-mid: #122040;
+
+  --color-primary: #1d4ed8;
+  --color-primary-bright: #3b82f6;
+  --color-primary-light: #eff6ff;
+
+  --color-accent: #06b6d4;
+  --color-white: #ffffff;
+
+  --color-grey-50: #f8fafc;
+  --color-grey-100: #f1f5f9;
+  --color-grey-300: #cbd5e1;
+  --color-grey-500: #64748b;
+  --color-grey-700: #334155;
+
+  --color-text: #0f172a;
+
+  --font-display: "Syne", sans-serif;
+  --font-body: "DM Sans", sans-serif;
+
+  --shadow-sm: 0 4px 24px rgba(10, 22, 40, 0.1);
+  --shadow-md: 0 16px 48px rgba(10, 22, 40, 0.16);
+
+  --radius-xl: 12px;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-white);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    color: var(--color-navy);
+    letter-spacing: -0.02em;
+  }
+}

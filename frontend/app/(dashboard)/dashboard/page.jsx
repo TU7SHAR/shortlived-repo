@@ -1,0 +1,864 @@
+"use client";
+
+import { useState, useEffect, useMemo, useRef } from "react";
+import {
+  Plus,
+  Copy,
+  Check,
+  Trash2,
+  Loader2,
+  Search,
+  Filter,
+  Mail,
+  X,
+  RefreshCw,
+  ExternalLink,
+  Ticket,
+  Users,
+  BookOpenCheck,
+  LineChart,
+  Layers,
+  ArrowUpRight,
+  ChevronDown,
+} from "lucide-react";
+import gsap from "gsap";
+import { DB } from "@/app/lib/schema_map";
+import { applyFiltersAndSort } from "../../utils/sortUtils";
+import { sendInviteLink } from "../../lib/email";
+import { supabase } from "@/app/lib/supabase";
+import { siteConfig } from "@/app/utils/config";
+
+export default function DashboardHome() {
+  const [tokens, setTokens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const modalRef = useRef(null);
+  const overlayRef = useRef(null);
+  const createBtnRef = useRef(null);
+
+  // Global cross-page summary metrics states
+  const [totalOnboardedLeads, setTotalOnboardedLeads] = useState(0);
+  const [trainingStats, setTrainingStats] = useState({
+    completed: 0,
+    partial: 0,
+  });
+  const [totalTestsTaken, setTotalTestsTaken] = useState(0);
+
+  // Modal States
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalCaption, setModalCaption] = useState("");
+  const [modalEmail, setModalEmail] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Initialize sort state using the DB Map
+  const [sortConfig, setSortConfig] = useState({
+    key: DB.TOKENS.CREATED_AT,
+    direction: "desc",
+    filterKey: DB.TOKENS.IS_USED,
+    filterValue: "All",
+  });
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // GSAP Modal Animation
+  useEffect(() => {
+    document.title = `Dashboard | ${siteConfig.name}`;
+    if (isModalOpen) {
+      // Prevent scrolling
+      document.body.style.overflow = "hidden";
+
+      if (modalRef.current && overlayRef.current) {
+        // Animate overlay
+        gsap.fromTo(
+          overlayRef.current,
+          { opacity: 0 },
+          { opacity: 1, duration: 0.3, ease: "power2.out" },
+        );
+
+        // Animate modal
+        gsap.fromTo(
+          modalRef.current,
+          {
+            opacity: 0,
+            y: 30,
+            scale: 0.95,
+          },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.5,
+            ease: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+          },
+        );
+
+        // Animate form elements
+        const inputs = modalRef.current.querySelectorAll("input, textarea");
+        gsap.fromTo(
+          inputs,
+          { opacity: 0, y: 20 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.5,
+            stagger: 0.1,
+            ease: "power2.out",
+            delay: 0.2,
+          },
+        );
+
+        const buttons = modalRef.current.querySelectorAll(
+          "button[type='button'], button[type='submit']",
+        );
+        gsap.fromTo(
+          buttons,
+          { opacity: 0, y: 20 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.5,
+            ease: "power2.out",
+            delay: 0.4,
+          },
+        );
+      }
+    } else {
+      // Re-enable scrolling
+      document.body.style.overflow = "unset";
+    }
+
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [isModalOpen]);
+
+  // Hover animation for create button
+  useEffect(() => {
+    if (createBtnRef.current) {
+      const btn = createBtnRef.current;
+      const handleMouseEnter = () => {
+        gsap.to(btn, {
+          scale: 1.05,
+          duration: 0.3,
+          ease: "power2.out",
+        });
+      };
+
+      const handleMouseLeave = () => {
+        gsap.to(btn, {
+          scale: 1,
+          duration: 0.3,
+          ease: "power2.out",
+        });
+      };
+
+      btn.addEventListener("mouseenter", handleMouseEnter);
+      btn.addEventListener("mouseleave", handleMouseLeave);
+
+      return () => {
+        btn.removeEventListener("mouseenter", handleMouseEnter);
+        btn.removeEventListener("mouseleave", handleMouseLeave);
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGlobalDashboardMetrics();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchGlobalDashboardMetrics = async () => {
+    setLoading(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Fetch Tokens Generated By Admin
+      const { data: tokenData } = await supabase
+        .from(DB.TOKENS.TABLE)
+        .select("*")
+        .eq(DB.TOKENS.CREATED_BY, user.id)
+        .order(DB.TOKENS.CREATED_AT, { direction: "desc" });
+
+      if (tokenData) setTokens(tokenData);
+
+      // 2. Fetch Onboarding Leads Counts
+      const { data: leadsData } = await supabase
+        .from(DB.ONBOARDING.TABLE)
+        .select(`id, training_status`);
+
+      if (leadsData) {
+        setTotalOnboardedLeads(leadsData.length);
+
+        // Sum up training status metrics dynamically
+        const completed = leadsData.filter(
+          (l) => l.training_status === "completed",
+        ).length;
+        const partial = leadsData.filter(
+          (l) => l.training_status === "partial",
+        ).length;
+        setTrainingStats({ completed, partial });
+      }
+
+      // 3. Fetch Test Analytics Counts Taken by Trainees
+      const { count: testCount } = await supabase
+        .from("test_results")
+        .select("*", { count: "exact", head: true })
+        .eq("admin_id", user.id);
+
+      setTotalTestsTaken(testCount || 0);
+    } catch (err) {
+      console.error("Error building multi-pane workspace matrices:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Compute Invitation & Voucher Metrics Dynamically
+  const tokenStats = useMemo(() => {
+    const total = tokens.length;
+    const consumed = tokens.filter((t) => t[DB.TOKENS.IS_USED]).length;
+    const activeAvailable = tokens.filter(
+      (t) => !t[DB.TOKENS.IS_USED] && !t[DB.TOKENS.IS_REVOKED],
+    ).length;
+
+    return { total, consumed, activeAvailable };
+  }, [tokens]);
+
+  const generateToken = async (e) => {
+    e.preventDefault();
+    if (!modalCaption.trim()) return;
+
+    setIsGenerating(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const uniqueToken =
+        "token_" +
+        Math.random().toString(36).substring(2, 15) +
+        Math.random().toString(36).substring(2, 15);
+      const isLocalhost =
+        typeof window !== "undefined"
+          ? window.location.hostname === "localhost" ||
+            window.location.hostname === "127.0.0.1"
+          : process.env.NODE_ENV === "development";
+
+      const botUsername = isLocalhost
+        ? "devRagbot"
+        : siteConfig.botUsername || "DrishRag_Bot";
+      const generatedLink = `https://t.me/${botUsername}?start=${uniqueToken}`;
+
+      const payload = {
+        [DB.TOKENS.TOKEN_STRING]: generatedLink,
+        [DB.TOKENS.CREATED_BY]: user.id,
+        [DB.TOKENS.IS_USED]: false,
+        [DB.TOKENS.CAPTION]: modalCaption,
+        [DB.TOKENS.TOKEN_TYPE]: "user",
+        [DB.TOKENS.IS_REVOKED]: false,
+        sent_to: modalEmail || null,
+      };
+
+      const { data, error } = await supabase
+        .from(DB.TOKENS.TABLE)
+        .insert([payload])
+        .select();
+
+      if (error) throw error;
+
+      if (modalEmail.trim() && data) {
+        await sendInviteLink(modalEmail, generatedLink, modalCaption);
+      }
+
+      setModalCaption("");
+      setModalEmail("");
+
+      // Close modal with animation
+      if (modalRef.current && overlayRef.current) {
+        gsap.to(overlayRef.current, {
+          opacity: 0,
+          duration: 0.3,
+          ease: "power2.in",
+        });
+        gsap.to(modalRef.current, {
+          opacity: 0,
+          y: 30,
+          scale: 0.95,
+          duration: 0.4,
+          ease: "power2.in",
+          onComplete: () => {
+            setIsModalOpen(false);
+            fetchGlobalDashboardMetrics();
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Generation error:", error);
+      alert("Failed to generate token.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const deleteToken = async (id, tokenType) => {
+    if (tokenType === "admin") {
+      alert("System Protected: Admin vouchers cannot be removed.");
+      return;
+    }
+    if (!confirm("Remove this token?")) return;
+
+    const { error } = await supabase
+      .from(DB.TOKENS.TABLE)
+      .delete()
+      .eq(DB.TOKENS.ID, id);
+    if (!error) {
+      setTokens(tokens.filter((t) => t[DB.TOKENS.ID] !== id));
+    }
+  };
+
+  const copyToClipboard = (link, id) => {
+    navigator.clipboard.writeText(link);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const filteredTokens = useMemo(() => {
+    let output = tokens;
+    if (searchQuery) {
+      output = output.filter(
+        (t) =>
+          t[DB.TOKENS.CAPTION]
+            ?.toLowerCase()
+            .includes(searchQuery.toLowerCase()) ||
+          t[DB.TOKENS.TOKEN_STRING]
+            ?.toLowerCase()
+            .includes(searchQuery.toLowerCase()),
+      );
+    }
+    return applyFiltersAndSort(output, sortConfig, DB);
+  }, [tokens, searchQuery, sortConfig]);
+
+  const closeModal = () => {
+    if (modalRef.current && overlayRef.current) {
+      gsap.to(overlayRef.current, {
+        opacity: 0,
+        duration: 0.3,
+        ease: "power2.in",
+      });
+      gsap.to(modalRef.current, {
+        opacity: 0,
+        y: 30,
+        scale: 0.95,
+        duration: 0.4,
+        ease: "power2.in",
+        onComplete: () => setIsModalOpen(false),
+      });
+    }
+  };
+
+  return (
+    <div className="p-8 space-y-8">
+      {/* Header with Create Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-navy mb-2">Access Tokens</h1>
+          <p className="text-grey-500">
+            Manage and distribute registration links
+          </p>
+        </div>
+        <button
+          ref={createBtnRef}
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white hover:bg-primary/90 font-semibold transition-all shadow-sm"
+        >
+          <Plus size={18} />
+          Create Token
+        </button>
+      </div>
+
+      {/* Metrics Section */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-grey-50 rounded-xl border border-grey-100 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-grey-500 text-xs font-bold uppercase tracking-wider mb-1">
+                Total Tokens
+              </p>
+              <p className="text-3xl font-bold text-navy">{tokenStats.total}</p>
+            </div>
+            <Layers size={24} className="text-grey-300" />
+          </div>
+          <div className="mt-3 h-1 bg-grey-100 rounded-full overflow-hidden">
+            <div className="h-full bg-primary w-2/3" />
+          </div>
+        </div>
+
+        <div className="bg-grey-50 rounded-xl border border-grey-100 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-grey-500 text-xs font-bold uppercase tracking-wider mb-1">
+                Active
+              </p>
+              <p className="text-3xl font-bold text-navy">
+                {tokenStats.activeAvailable}
+              </p>
+            </div>
+            <ArrowUpRight size={24} className="text-grey-300" />
+          </div>
+          <p className="text-xs text-grey-500 mt-3">Ready to distribute</p>
+        </div>
+
+        <div className="bg-grey-50 rounded-xl border border-grey-100 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-grey-500 text-xs font-bold uppercase tracking-wider mb-1">
+                Consumed
+              </p>
+              <p className="text-3xl font-bold text-navy">
+                {tokenStats.consumed}
+              </p>
+            </div>
+            <Check size={24} className="text-grey-300" />
+          </div>
+          <p className="text-xs text-grey-500 mt-3">Successfully used</p>
+        </div>
+
+        <div className="bg-grey-50 rounded-xl border border-grey-100 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-grey-500 text-xs font-bold uppercase tracking-wider mb-1">
+                Onboarded
+              </p>
+              <p className="text-3xl font-bold text-navy">
+                {totalOnboardedLeads}
+              </p>
+            </div>
+            <Users size={24} className="text-grey-300" />
+          </div>
+          <p className="text-xs text-grey-500 mt-3">Active participants</p>
+        </div>
+      </div>
+
+      {/* Search and Filter - FORCE ONE LINE */}
+      <div className="flex items-center gap-3 flex-nowrap">
+        <div className="relative flex-1 min-w-0">
+          <Search
+            size={16}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-grey-300"
+          />
+          <input
+            type="text"
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white border border-grey-100 shadow-sm rounded-xl pl-10 pr-4 py-2.5 text-navy placeholder-grey-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm transition-all truncate"
+          />
+        </div>
+
+        <div className="relative flex-shrink-0" ref={dropdownRef}>
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shadow-sm whitespace-nowrap ${
+              dropdownOpen
+                ? "text-white border-primary"
+                : "bg-white text-navy border-grey-100 hover:border-grey-300"
+            }`}
+            style={
+              dropdownOpen
+                ? {
+                    background:
+                      "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)",
+                  }
+                : {}
+            }
+          >
+            <Filter size={14} />
+            {sortConfig.filterValue}
+            <ChevronDown
+              size={14}
+              className={`transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {dropdownOpen && (
+            <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-grey-100 rounded-xl shadow-md overflow-hidden z-40">
+              {["All", "Used", "Unused"].map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => {
+                    setSortConfig({ ...sortConfig, filterValue: val });
+                    setDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 text-sm font-semibold transition-all ${
+                    sortConfig.filterValue === val
+                      ? "text-primary bg-primary-light"
+                      : "text-grey-700 hover:bg-grey-50"
+                  }`}
+                >
+                  {val === "All"
+                    ? "All Tokens"
+                    : val === "Used"
+                      ? "Consumed"
+                      : "Unclaimed"}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tokens List */}
+      <div className="bg-white border border-grey-100 rounded-xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[640px]">
+            <thead>
+              <tr className="bg-grey-50 text-grey-500 text-[10px] uppercase tracking-widest font-bold">
+                <th className="p-4 border-b border-grey-100 whitespace-nowrap">
+                  Type
+                </th>
+                <th className="p-4 border-b border-grey-100">
+                  Caption / Purpose
+                </th>
+                <th className="p-4 border-b border-grey-100">Token Link</th>
+                <th className="p-4 border-b border-grey-100 whitespace-nowrap">
+                  Status
+                </th>
+                <th className="p-4 border-b border-grey-100">User</th>
+                <th className="p-4 border-b border-grey-100 whitespace-nowrap">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-grey-100">
+              {filteredTokens.length === 0 && (
+                <tr>
+                  <td
+                    colSpan="6"
+                    className="p-8 text-center text-grey-500 text-sm font-medium"
+                  >
+                    No matching invite structures active inside this section.
+                  </td>
+                </tr>
+              )}
+              {filteredTokens.map((token) => {
+                const link = token[DB.TOKENS.TOKEN_STRING] || "";
+                const isConsumed = token[DB.TOKENS.IS_USED];
+                const isAdmin = token[DB.TOKENS.TOKEN_TYPE] === "admin";
+                const isRevoked = token[DB.TOKENS.IS_REVOKED];
+                const username = token[DB.TOKENS.USED_BY_USER];
+                const note = token[DB.TOKENS.CAPTION] || "—";
+
+                return (
+                  <tr
+                    key={token[DB.TOKENS.ID]}
+                    className={`text-[0.92rem] transition-colors ${
+                      isRevoked
+                        ? "bg-red-50/50 hover:bg-red-50"
+                        : "hover:bg-grey-50"
+                    }`}
+                  >
+                    {/* Type */}
+                    <td className="p-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                          isRevoked
+                            ? "bg-red-50 text-red-600 border border-red-100"
+                            : isAdmin
+                              ? "bg-navy text-white"
+                              : "bg-primary-light text-primary"
+                        }`}
+                      >
+                        {isRevoked ? "Revoked" : isAdmin ? "admin" : "user"}
+                      </span>
+                    </td>
+
+                    {/* Caption */}
+                    <td className="p-4 text-sm font-semibold text-navy max-w-[160px] truncate">
+                      {note}
+                    </td>
+
+                    {/* Link */}
+                    <td
+                      className={`p-4 font-mono text-xs truncate max-w-[220px] ${isRevoked ? "text-red-400" : "text-grey-500"}`}
+                    >
+                      {link}
+                    </td>
+
+                    {/* Status */}
+                    <td className="p-4 whitespace-nowrap">
+                      {isRevoked ? (
+                        <span className="text-grey-400">—</span>
+                      ) : isConsumed ? (
+                        <span className="flex items-center gap-2 text-xs font-semibold text-grey-400">
+                          <div className="w-1.5 h-1.5 rounded-full bg-grey-300" />
+                          Used
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2 text-xs font-semibold text-[#16a34a]">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#25D366] animate-pulse" />
+                          Ready
+                        </span>
+                      )}
+                    </td>
+
+                    {/* User */}
+                    <td
+                      className={`p-4 text-xs ${isRevoked ? "text-red-400" : "text-grey-500"}`}
+                    >
+                      {isConsumed && username ? (
+                        <span className="font-semibold text-navy">
+                          @{username}
+                        </span>
+                      ) : (
+                        <span className="italic opacity-70">—</span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => window.open(link, "_blank")}
+                          className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1 ${
+                            isConsumed || isRevoked
+                              ? "bg-grey-100 text-grey-500 hover:bg-grey-100 cursor-default"
+                              : "bg-primary-light text-primary hover:bg-primary hover:text-white"
+                          }`}
+                          title="Open Telegram Link"
+                        >
+                          <ExternalLink size={11} />
+                          Open
+                        </button>
+                        <button
+                          onClick={() =>
+                            copyToClipboard(link, token[DB.TOKENS.ID])
+                          }
+                          className="text-xs px-2.5 py-1 rounded-lg bg-grey-50 border border-grey-100 text-grey-700 hover:bg-grey-100 transition-all font-semibold flex items-center gap-1"
+                          title="Copy Link"
+                        >
+                          {copied === token[DB.TOKENS.ID] ? (
+                            <>
+                              <Check size={11} />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={11} />
+                              Copy
+                            </>
+                          )}
+                        </button>
+                        {!isAdmin && (
+                          <button
+                            onClick={() =>
+                              deleteToken(
+                                token[DB.TOKENS.ID],
+                                token[DB.TOKENS.TOKEN_TYPE],
+                              )
+                            }
+                            className="text-xs px-2 py-1 rounded-lg text-grey-300 hover:bg-red-50 hover:text-red-500 transition-all"
+                            title="Delete Token"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* PREMIUM REDESIGNED MODAL */}
+      {isModalOpen && (
+        <>
+          <div
+            ref={overlayRef}
+            onClick={closeModal}
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-lg"
+            style={{ left: 0, top: 0, width: "100vw", height: "100vh" }}
+          />
+          <div
+            ref={modalRef}
+            className="fixed z-50 flex items-center justify-center pointer-events-none overflow-hidden"
+            style={{ left: 0, top: 0, width: "100vw", height: "100vh" }}
+          >
+            <div
+              className="rounded-3xl shadow-2xl overflow-hidden pointer-events-auto"
+              style={{
+                maxWidth: "520px",
+                width: "calc(100% - 2rem)",
+                maxHeight: "90vh",
+                overflowY: "auto",
+                boxShadow:
+                  "0 25px 50px -12px rgba(10, 22, 40, 0.25), 0 0 60px rgba(29, 78, 216, 0.25)",
+                background:
+                  "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #0ea5e9 100%)",
+              }}
+            >
+              {/* PREMIUM GRADIENT HEADER */}
+              <div
+                className="relative px-8 pt-8 pb-6 overflow-hidden"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #0ea5e9 100%)",
+                }}
+              >
+                {/* Animated background blur orbs */}
+                <div
+                  className="absolute -top-20 -right-20 w-64 h-64 rounded-full blur-3xl opacity-30"
+                  style={{ backgroundColor: "rgba(255, 255, 255, 0.3)" }}
+                />
+                <div
+                  className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full blur-3xl opacity-20"
+                  style={{ backgroundColor: "rgba(6, 182, 212, 0.4)" }}
+                />
+
+                {/* Header Content */}
+                <div className="relative z-10 flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center flex-shrink-0">
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)",
+                        }}
+                      >
+                        <Plus size={20} className="text-white" />
+                      </div>
+                    </div>
+                    <div>
+                      <h2 className="text-3xl font-bold text-white tracking-tight">
+                        New Token
+                      </h2>
+                      <p className="text-white/80 text-sm mt-1 font-medium">
+                        Secure registration link for team members
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={closeModal}
+                    className="text-white/70 hover:text-white hover:bg-white/15 p-2 rounded-xl transition-all flex-shrink-0 backdrop-blur-md border border-white/20"
+                  >
+                    <X size={22} />
+                  </button>
+                </div>
+              </div>
+
+              {/* FORM CONTENT - WHITE SECTION */}
+              <form
+                onSubmit={generateToken}
+                className="px-8 py-8 space-y-6 bg-white"
+              >
+                {/* Purpose Field */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <label className="block text-sm font-bold text-navy tracking-wide">
+                      PURPOSE
+                    </label>
+                    <div className="h-px flex-1 bg-gradient-to-r from-grey-200 to-transparent" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Sales Team - Q1 2024"
+                    value={modalCaption}
+                    onChange={(e) => setModalCaption(e.target.value)}
+                    className="w-full px-4 py-3 bg-gradient-to-br from-blue-50 to-white border-2 border-blue-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-primary/40 focus:border-primary text-sm transition-all placeholder-grey-400 font-medium shadow-sm"
+                  />
+                  <p className="text-xs text-grey-600 font-medium">
+                    Who is this token for or what's its purpose
+                  </p>
+                </div>
+
+                {/* Email Field */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <label className="block text-sm font-bold text-navy tracking-wide">
+                      EMAIL
+                    </label>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                      Optional
+                    </span>
+                    <div className="h-px flex-1 bg-gradient-to-r from-grey-200 to-transparent" />
+                  </div>
+                  <input
+                    type="email"
+                    placeholder="team@company.com"
+                    value={modalEmail}
+                    onChange={(e) => setModalEmail(e.target.value)}
+                    className="w-full px-4 py-3 bg-gradient-to-br from-blue-50 to-white border-2 border-blue-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-primary/40 focus:border-primary text-sm transition-all placeholder-grey-400 font-medium shadow-sm"
+                  />
+                  <p className="text-xs text-grey-600 font-medium">
+                    Leave blank to copy manually, or we'll send it to their
+                    inbox
+                  </p>
+                </div>
+
+                {/* Divider */}
+                <div className="h-px bg-gradient-to-r from-transparent via-grey-200 to-transparent" />
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="flex-1 px-4 py-3 text-sm font-semibold text-grey-700 bg-grey-100 hover:bg-grey-150 rounded-xl transition-all border border-grey-200 hover:border-grey-300 active:scale-95 backdrop-blur-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isGenerating || !modalCaption.trim()}
+                    className="flex-1 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all flex items-center justify-center gap-2.5 active:scale-95 relative overflow-hidden group"
+                    style={{
+                      background:
+                        isGenerating || !modalCaption.trim()
+                          ? "linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)"
+                          : "linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%)",
+                      boxShadow:
+                        !isGenerating && modalCaption.trim()
+                          ? "0 8px 20px rgba(29, 78, 216, 0.35)"
+                          : "none",
+                    }}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={18} />
+                        <span>Generate Token</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
