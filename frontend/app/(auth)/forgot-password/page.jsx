@@ -1,3 +1,4 @@
+// frontend/app/(auth)/forgot-password/page.jsx
 "use client";
 
 import { useState, useRef } from "react";
@@ -5,6 +6,9 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { supabase } from "../../lib/supabase";
 import Link from "next/link";
+import Image from "next/image";
+import { Shield, Mail, Send } from "lucide-react";
+import { siteConfig } from "../../utils/config";
 
 export default function ForgotPassword() {
   const container = useRef(null);
@@ -16,9 +20,9 @@ export default function ForgotPassword() {
   useGSAP(
     () => {
       gsap.fromTo(
-        ".auth-box",
-        { opacity: 0, scale: 0.95, y: 20 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.6, ease: "power3.out" },
+        ".auth-card",
+        { opacity: 0, y: 30 },
+        { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", delay: 0.2 },
       );
     },
     { scope: container },
@@ -45,81 +49,119 @@ export default function ForgotPassword() {
   return (
     <div
       ref={container}
-      className="min-h-screen bg-zinc-50 flex items-center justify-center p-4"
+      className="min-h-screen relative flex items-center justify-center lg:justify-end lg:pr-[12%] p-6 font-sans"
     >
-      <div className="auth-box max-w-md w-full bg-white rounded-2xl shadow-sm border border-zinc-200 p-8">
-        {isSuccess ? (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
-              📨
+      {/* ── Background Image ── */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/auth/image.png"
+          alt="Background"
+          fill
+          className="object-cover object-center"
+          priority
+        />
+        <div className="absolute inset-0 bg-slate-900/10 mix-blend-multiply" />
+      </div>
+
+      {/* ── Foreground Card ── */}
+      <div className="auth-card relative z-10 w-full max-w-[460px] bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] p-8 sm:p-10 border border-slate-100">
+        {/* Header & Logo (Centered) */}
+        <div className="flex flex-col items-center justify-center mb-8">
+          <Link href="/" className="flex items-center gap-2.5 mb-6 group">
+            <div className="w-9 h-9 rounded-[10px] bg-blue-600 flex items-center justify-center shadow-md">
+              <Shield size={18} className="text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-black mb-2">
+            <span className="text-xl font-bold tracking-wide text-slate-900 uppercase">
+              {siteConfig?.name || "Salesji"}
+            </span>
+          </Link>
+
+          {!isSuccess && (
+            <div className="text-center">
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                Reset Password
+              </h1>
+              <p className="text-sm text-slate-500">
+                Enter your email and we'll send you a reset link.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Success State */}
+        {isSuccess ? (
+          <div className="text-center pb-4 animate-in fade-in zoom-in duration-500">
+            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Send size={32} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">
               Check your email
             </h2>
-            <p className="text-zinc-500 mb-8">
-              We sent a password reset link to{" "}
-              <span className="font-medium text-black">{email}</span>.
+            <p className="text-sm text-slate-500 mb-8 leading-relaxed">
+              We sent a password reset link to <br />
+              <span className="font-semibold text-slate-900">{email}</span>.
             </p>
             <Link
               href="/login"
-              className="w-full inline-block bg-black hover:bg-zinc-800 text-white font-medium py-3 rounded-lg transition-colors"
+              className="w-full inline-flex items-center justify-center py-3.5 rounded-xl text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors shadow-sm"
             >
               Back to Login
             </Link>
           </div>
         ) : (
           <>
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-black tracking-tight">
-                Reset Password
-              </h1>
-              <p className="text-zinc-500 mt-2">
-                Enter your email and we'll send you a reset link.
-              </p>
-            </div>
-
+            {/* Error Message */}
             {message && (
               <div
-                className={`p-3 rounded-lg mb-6 text-sm border ${
+                className={`p-3.5 rounded-xl mb-6 text-sm border text-center ${
                   message.type === "error"
-                    ? "bg-red-50 border-red-200 text-red-700"
-                    : "bg-black text-white"
+                    ? "border-red-200 bg-red-50 text-red-600"
+                    : "border-green-200 bg-green-50 text-green-600"
                 }`}
               >
                 {message.text}
               </div>
             )}
 
-            <form onSubmit={handleResetRequest} className="space-y-4 mb-6">
+            {/* Form */}
+            <form onSubmit={handleResetRequest} className="space-y-5">
+              {/* Email Input */}
               <div>
-                <label className="block text-sm font-medium text-black mb-1">
+                <label className="block text-xs font-semibold text-slate-700 mb-2 ml-1">
                   Email Address
                 </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-black focus:outline-none transition-all"
-                  placeholder="user@example.com"
-                  required
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Mail size={16} className="text-slate-400" />
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="user@example.com"
+                    required
+                    className="w-full pl-11 pr-4 py-3 rounded-xl text-sm border border-slate-200 text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-all"
+                  />
+                </div>
               </div>
 
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-black hover:bg-zinc-800 text-white font-medium py-2.5 rounded-lg transition-colors mt-2"
+                className="w-full py-3.5 rounded-xl text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-6 shadow-sm"
               >
                 {loading ? "Sending link..." : "Send Reset Link"}
               </button>
             </form>
 
-            <div className="text-center mt-6">
+            {/* Back to Login Link */}
+            <div className="text-center mt-8">
               <Link
                 href="/login"
-                className="text-sm text-zinc-500 hover:text-black hover:underline transition-colors font-medium"
+                className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors flex items-center justify-center gap-2"
               >
-                ← Back to Login
+                <span>&larr;</span> Back to Login
               </Link>
             </div>
           </>
