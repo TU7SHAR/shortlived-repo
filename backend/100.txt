@@ -1,0 +1,58 @@
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Processes uploaded files and asks for category."""
+    document = update.message.document
+
+    if document.file_size > 20 * 1024 * 1024:
+        msg = await update.message.reply_text("File is too large. Please upload a file smaller than 20MB.")
+        context.user_data.setdefault('msg_ids', []).append(msg.message_id)
+        return
+
+    # ✅ SAFELY ESCAPE FILENAMES: Prevents Telegram HTML parse crashes if a file is named "My_File_<v2>.pdf"
+    safe_filename = str(document.file_name).replace('<', '&lt;').replace('>', '&gt;')
+    
+    status_msg = await update.message.reply_text(f"📥 Received <b>{safe_filename}</b>...", parse_mode="HTML")
+    context.user_data.setdefault('msg_ids', []).append(status_msg.message_id)
+    
+    # ✅ Initialize Live Logging State
+    progress_state = {"msg": "Initializing secure connection..."}
+    timer_task = asyncio.create_task(loading_animation(status_msg, f"Processing <b>{safe_filename}</b>...", progress_state))
+
+    try:
+        progress_state["msg"] = "Downloading file from Telegram servers..."
+        file = await context.bot.get_file(document.file_id)
+        file_bytes = await file.download_as_bytearray()
+        
+        try:
+            progress_state["msg"] = "Extracting raw text from document architecture..."
+            file_content, is_truncated, processed, unprocessed = await extract_content(bytes(file_bytes), document.file_name)
+        except Exception as e:
+            timer_task.cancel() # Kill timer on error
+            logger.error(f"Text extraction failed for {document.file_name}: {e}")
+            await status_msg.edit_text(f"❌ Could not extract text from <b>{safe_filename}</b>.", parse_mode="HTML")
+            return
+
+        if not file_content or not file_content.strip():
+            timer_task.cancel() # Kill timer on error
+            await status_msg.edit_text("❌ Could not extract any readable text from the file.", parse_mode="HTML")
+            return
+
+        # Store a single, clean pending task
+        context.user_data['pending_task'] = {
+            "type": "doc",
+            "filename": document.file_name,
+            "text": file_content
+        }
+        
+        timer_task.cancel() # Kill timer on success
+        
+        # Ask for category
+        await status_msg.edit_text(
+            f"✅ File processed: <b>{safe_filename}</b>\n\nSelect a category to begin AI Condensation:",
+            reply_markup=await get_category_keyboard(),
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        timer_task.cancel() # Kill timer on error
+        logger.error(f"Error handling document: {e}")
+        await status_msg.edit_text(f"❌ Error: {str(e)[:80]}", parse_mode="HTML")
