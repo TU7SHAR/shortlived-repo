@@ -43,15 +43,28 @@ export default function KnowledgeBaseTable() {
     fetchLock.current = true;
     setLoading(true);
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("No authenticated user found");
+
+      // ✅ FIXED: We are now using DB.FILES.CREATED_BY instead of "admin_id"
       const { data, error } = await supabase
         .from(DB.FILES.TABLE)
         .select("*")
+        .eq(DB.FILES.CREATED_BY, user.id)
         .order(DB.FILES.CREATED_AT, { ascending: false });
 
-      if (error) throw error;
+      // If it throws an error, we log the actual Supabase error object so it isn't just {}
+      if (error) {
+        console.error("Supabase Database Error:", error);
+        throw error;
+      }
+
+      // If no files exist, data will be null, and we safely set an empty array!
       setFiles(data || []);
     } catch (error) {
-      console.error("Error fetching files:", error);
+      console.error("Error fetching files:", error.message || error);
     } finally {
       setLoading(false);
       fetchLock.current = false;

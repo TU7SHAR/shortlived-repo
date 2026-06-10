@@ -161,7 +161,9 @@ export default function DashboardHome() {
 
       const { data: leadsData } = await supabase
         .from(DB.ONBOARDING.TABLE)
-        .select(`id, training_status`);
+        .select(`id, training_status`)
+        .eq("admin_id", user.id);
+
       if (leadsData) {
         setTotalOnboardedLeads(leadsData.length);
         const completed = leadsData.filter(

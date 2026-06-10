@@ -25,12 +25,19 @@ export default function TrainingDashboard() {
     document.title = `Training Dashboard | ${siteConfig.name}`;
     async function fetchTrainingAndAnalytics() {
       try {
-        // 1. Fetch Users
+        // 0. Get the active admin
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // 1. Fetch Users (Scoped to this admin)
         const { data: userData, error: userError } = await supabase
           .from(DB.ONBOARDING.TABLE)
           .select(
             `${DB.ONBOARDING.ID}, ${DB.ONBOARDING.TELEGRAM_ID}, ${DB.ONBOARDING.FULL_NAME}, ${DB.ONBOARDING.ROLE}, ${DB.ONBOARDING.TRAINING_STATUS}`,
           )
+          .eq("admin_id", user.id) // <-- Added filter
           .order(DB.ONBOARDING.CREATED_AT, { ascending: false });
 
         if (userError) {
@@ -38,10 +45,11 @@ export default function TrainingDashboard() {
           return;
         }
 
-        // 2. Fetch Interaction counts group by telegram_id
+        // 2. Fetch Interaction counts group by telegram_id (Scoped to this admin)
         const { data: analyticsData, error: analyticsError } = await supabase
           .from("chat_analytics")
-          .select("telegram_id");
+          .select("telegram_id")
+          .eq("admin_id", user.id); // <-- Added filter
 
         // Create a mapping dictionary for individual interaction counts
         const interactionCounts = {};
@@ -56,9 +64,10 @@ export default function TrainingDashboard() {
         }
 
         // Combine the user records with their specific interaction counts
-        const combinedUsers = (userData || []).map((user) => ({
-          ...user,
-          interactions: interactionCounts[user[DB.ONBOARDING.TELEGRAM_ID]] || 0,
+        const combinedUsers = (userData || []).map((userRecord) => ({
+          ...userRecord,
+          interactions:
+            interactionCounts[userRecord[DB.ONBOARDING.TELEGRAM_ID]] || 0,
         }));
 
         setUsers(combinedUsers);

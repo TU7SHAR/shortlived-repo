@@ -272,18 +272,29 @@ class DataCondensationEngine:
         filename: str,
         raw_content: str,
         admin_id: str,
-        uploaded_by_username: str
+        uploaded_by_username: str,
+        progress_state: dict = None
     ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]], CondensationMetrics, List[str]]:
         
+        def push_log(msg):
+            logger.info(msg)
+            if progress_state: progress_state["msg"] = msg
+
         start_time = time.time()
-        logger.info(f"[{admin_id}] Starting condensation for {filename}...")
+        push_log(f"Starting semantic chunking for {filename}...")
         
+        chunks = DataCondensationEngine._chunk_text(raw_content)
+        extracted_results = []
+        
+        push_log(f"Queued {len(chunks)} chunks for AI Extraction...")
+
         chunks = DataCondensationEngine._chunk_text(raw_content)
         
         extracted_results = []
         logger.info(f"Extracting {len(chunks)} chunks sequentially to respect API limits...")
         
         for i, chunk in enumerate(chunks):
+            push_log(f"AI Engine: Extracting facts from chunk {i+1} of {len(chunks)}...")
             facts_dict = FactExtractionEngine.extract_facts_from_chunk(chunk, i)
             if facts_dict:
                 extracted_results.append(facts_dict)
@@ -528,12 +539,17 @@ class CondensationDatabaseManager:
         uploaded_by_id: int,
         uploaded_by_username: str,
         category: str = "Product",
-        raw_chunks: List[str] = None
+        raw_chunks: List[str] = None,
+        progress_state: dict = None
     ) -> bool:
         if not supabase:
             logger.warning("Supabase not configured - skipping database save")
             return False
         
+        def push_log(msg):
+            logger.info(msg)
+            if progress_state: progress_state["msg"] = msg
+
         try:
             file_record = {
                 TblFiles.FILENAME: filename,
@@ -551,9 +567,10 @@ class CondensationDatabaseManager:
             if raw_chunks and file_uuid:
                 try:
                     from embedder import get_embeddings_batch
-                    logger.info(f"Generating embeddings for {len(raw_chunks)} raw chunks...")
+                    push_log(f"Generating vector embeddings for {len(raw_chunks)} document chunks...")
                     embeddings = get_embeddings_batch(raw_chunks)
                     
+                    push_log("Saving raw text vectors to database...")
                     raw_chunks_data = []
                     for i, chunk_text in enumerate(raw_chunks):
                         chunk_record = {
@@ -637,11 +654,13 @@ class CondensationDatabaseManager:
             if embedding_anchors:
                 try:
                     from embedder import get_embeddings_batch
+                    push_log(f"Generating vector embeddings for {len(embedding_anchors)} asymmetric anchors...")
                     logger.info(f"Generating embeddings for {len(embedding_anchors)} asymmetric anchors...")
                     
                     anchor_texts = [anchor["embedding_text"] for anchor in embedding_anchors]
                     anchor_embeddings = get_embeddings_batch(anchor_texts)
                     
+                    push_log("Populating asymmetric anchors into vector database...")
                     chunks_data = []
                     for i, anchor in enumerate(embedding_anchors):
                         chunk_record = {
@@ -772,6 +791,7 @@ async def ingest_file_condensed(
     admin_id: str,
     uploaded_by_id: int,
     uploaded_by_username: str,
+    progress_state: dict = None,
     category: str = "Product"
 ) -> Tuple[bool, Optional[CondensationMetrics]]:
     logger.info(f"Starting condensed ingestion for {filename}")
@@ -780,7 +800,7 @@ async def ingest_file_condensed(
         filename,
         file_content,
         admin_id,
-        uploaded_by_username
+        uploaded_by_username, progress_state
     )
     
     if not knowledge_card:
@@ -796,7 +816,8 @@ async def ingest_file_condensed(
         uploaded_by_id=uploaded_by_id,
         uploaded_by_username=uploaded_by_username,
         category=category,
-        raw_chunks=raw_chunks
+        raw_chunks=raw_chunks,
+        progress_state=progress_state
     )
     
     return success, metrics

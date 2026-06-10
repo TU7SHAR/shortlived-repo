@@ -22,16 +22,29 @@ export default function ProfileHeader({ onMenuClick }) {
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState(null);
   const dropdownRef = useRef(null);
+  const containerRef = useRef(null); // ✅ ADD THIS
 
+  // ✅ ADD THIS ENTIRE useEffect
   useEffect(() => {
-    async function getProfile() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
+    const handleClickOutside = (event) => {
+      // If the menu is open AND the click happened outside our container, close it
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
     }
-    getProfile();
-  }, []);
+
+    // Cleanup listener when component unmounts or menu closes
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
 
   const handleLogout = async () => {
     try {

@@ -127,6 +127,28 @@ async def manual_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
+async def loading_animation(message, text_prefix, progress_state=None):
+    """Background task to update a Telegram message with a live timer AND terminal logs."""
+    start_time = asyncio.get_event_loop().time()
+    frames = ["⏳", "⌛"]
+    frame_idx = 0
+    while True:
+        await asyncio.sleep(2.5) # Update every 2.5s for snappy feedback
+        elapsed = int(asyncio.get_event_loop().time() - start_time)
+        icon = frames[frame_idx % len(frames)]
+        frame_idx += 1
+        
+        # Grab the live terminal log injected by the AI engine
+        live_log = f"\n\n <b>Live Terminal Log:</b>\n<code>> {progress_state['msg']}</code>" if progress_state and 'msg' in progress_state else ""
+        
+        try:
+            await message.edit_text(
+                f"{icon} {text_prefix}{live_log}\n\n⏱ <i>Time elapsed: {elapsed}s...</i>", 
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass # Ignore Telegram's "Message is not modified" errors
+
 async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     telegram_id = user.id
@@ -403,44 +425,55 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     document = update.message.document
 
     if document.file_size > 20 * 1024 * 1024:
-        await update.message.reply_text("File is too large. Please upload a file smaller than 20MB.")
+        msg = await update.message.reply_text("File is too large. Please upload a file smaller than 20MB.")
+        context.user_data.setdefault('msg_ids', []).append(msg.message_id)
         return
 
-    status_msg = await update.message.reply_text(f"📥 Downloading `{document.file_name}`...")
+    safe_filename = str(document.file_name).replace('<', '&lt;').replace('>', '&gt;')
+    
+    status_msg = await update.message.reply_text(f"📥 Received <b>{safe_filename}</b>...", parse_mode="HTML")
+    context.user_data.setdefault('msg_ids', []).append(status_msg.message_id)
+    
+    progress_state = {"msg": "Initializing secure connection..."}
+    timer_task = asyncio.create_task(loading_animation(status_msg, f"Processing <b>{safe_filename}</b>...", progress_state))
 
     try:
+        progress_state["msg"] = "Downloading file from Telegram servers..."
         file = await context.bot.get_file(document.file_id)
         file_bytes = await file.download_as_bytearray()
         
-        await status_msg.edit_text(f"📖 Extracting text from `{document.file_name}`...")
-        
         try:
+            progress_state["msg"] = "Extracting raw text from document architecture..."
             file_content, is_truncated, processed, unprocessed = await extract_content(bytes(file_bytes), document.file_name)
         except Exception as e:
+            timer_task.cancel() # Kill timer on error
             logger.error(f"Text extraction failed for {document.file_name}: {e}")
-            await status_msg.edit_text(f"❌ Could not extract text from `{document.file_name}`. Make sure it's a valid document.")
+            await status_msg.edit_text(f"❌ Could not extract text from <b>{safe_filename}</b>.", parse_mode="HTML")
             return
 
         if not file_content or not file_content.strip():
-            await status_msg.edit_text("❌ Could not extract any readable text from the file.")
+            timer_task.cancel() # Kill timer on error
+            await status_msg.edit_text("❌ Could not extract any readable text from the file.", parse_mode="HTML")
             return
 
-        # THE FIX: Store a single, clean pending task
         context.user_data['pending_task'] = {
             "type": "doc",
             "filename": document.file_name,
             "text": file_content
         }
         
-        # Ask for category
+        timer_task.cancel() # Kill timer on success
+        
         await status_msg.edit_text(
-            f"✅ File processed: `{document.file_name}`\n\nSelect category:",
-            reply_markup=await get_category_keyboard()
+            f"✅ File processed: <b>{safe_filename}</b>\n\nSelect a category to begin AI Condensation:",
+            reply_markup=await get_category_keyboard(),
+            parse_mode="HTML"
         )
 
     except Exception as e:
+        timer_task.cancel() # Kill timer on error
         logger.error(f"Error handling document: {e}")
-        await status_msg.edit_text(f"❌ Error: {str(e)[:80]}")
+        await status_msg.edit_text(f"❌ Error: {str(e)[:80]}", parse_mode="HTML")
 
 @require_auth
 async def manage_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -480,7 +513,11 @@ async def manage_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 @require_auth
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer()
+    
+    try:
+        await query.answer()
+    except Exception as e:
+        logger.warning(f"Ignored query.answer() timeout (queue was backed up): {e}")
     
     chat_id = query.message.chat_id
     role = context.user_data.get("role", "normal")
@@ -662,63 +699,112 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await send_new_msg(f" Database error: Could not remove <b>{filename}</b>")
             
         await manage_files(update, context)
-
+   
     elif query.data.startswith("cat_"):
-        # Prevent the "Query is too old" Telegram timeout crash
-        try:
-            await query.answer()
-        except:
-            pass
-            
         await disable_old_buttons()
         category = query.data.split("_")[1]
         
+        # Pull the data from memory (this prevents the NameError!)
         data = context.user_data.pop('pending_task', None)
         
         if not data:
             await query.message.edit_text("❌ Error: Session expired. Please upload or crawl again.")
             return
             
-        await query.message.edit_text(f"⏳ Categorizing into {category}...")
         admin_id = context.user_data.get('google_id')
         
         if data.get("type") == "doc":
-            from data_condensation import ingest_file_condensed
-            success, metrics = await ingest_file_condensed(
-                filename=data['filename'],
-                file_content=data['text'],
-                admin_id=admin_id,
-                uploaded_by_id=update.effective_user.id,
-                uploaded_by_username=update.effective_user.username or "unknown",
-                category=category
-            )
-            if success:
-                # Force RAM refresh
-                if admin_id in context.bot_data:
-                    context.bot_data[admin_id]["file_map"] = {}
-                await query.message.edit_text(f"✅ Saved file to {category}")
-            else:
-                await query.message.edit_text("❌ Failed to ingest file.")
+            # ✅ Initialize AI Engine Logging State
+            progress_state = {"msg": "Waking up Groq Engine..."}
+            timer_text = f"<b>Condensing & Structuring Data...</b>\n\nBuilding AI Knowledge Graph for <b>{category}</b>."
+            timer_task = asyncio.create_task(loading_animation(query.message, timer_text, progress_state))
+            
+            try:
+                from data_condensation import ingest_file_condensed
+                success, metrics = await ingest_file_condensed(
+                    filename=data['filename'],
+                    file_content=data['text'],
+                    admin_id=admin_id,
+                    uploaded_by_id=update.effective_user.id,
+                    uploaded_by_username=update.effective_user.username or "unknown",
+                    category=category,
+                    progress_state=progress_state
+                )
+                
+                timer_task.cancel() 
+                
+                if success:
+                    if admin_id in context.bot_data:
+                        context.bot_data[admin_id]["file_map"] = {}
+                    
+                    await query.message.edit_text(
+                        f"✅ <b>Success!</b>\nSaved <code>{data['filename']}</code> to <b>{category}</b>.\n⏱️ <i>Time taken: ~{int(metrics.processing_time_seconds)}s</i>", 
+                        parse_mode="HTML"
+                    )
+                else:
+                    await query.message.edit_text("❌ Failed to ingest file.")
+            except Exception as e:
+                timer_task.cancel() 
+                await query.message.edit_text(f"❌ Error during AI processing: {e}")  
         
         elif data.get("type") == "crawl":
+            crawl_data = data.get("data", {})
+            # Extract raw chunks and embeddings stored during the crawl
+            all_chunks = crawl_data.get("chunks", [])
+            all_embeddings = crawl_data.get("embeddings", [])
+            website_name = crawl_data.get("website_name", "Website_Crawl")
+            
+            if not all_chunks:
+                await query.message.edit_text("❌ Error: No data found to condense from this crawl.")
+                return
+
+            # ✅ Initialize Live Logging State
+            progress_state = {"msg": "Initializing clustering engine..."}
+            timer_text = f"<b>Condensing Website: {website_name}</b>\n\nAI is organizing your web crawl data."
+            timer_task = asyncio.create_task(loading_animation(query.message, timer_text, progress_state))
+            
             try:
-                # FOOLPROOF FIX: Find ANY file stuck as "Website" for this admin and FORCE the new category
-                supabase.table("ingested_files").update({"category": category}).eq("category", "Website").eq("created_by", admin_id).execute()
+                from data_condensation import DataCondensationEngine, CondensationDatabaseManager
                 
-                # Update chunks just in case
-                supabase.table("file_chunks").update({"relevance_category": category}).eq("relevance_category", "Website").eq("admin_id", admin_id).execute()
+                # 1. Run the Semantic Cluster and Condensation Engine
+                master_card, embedding_anchors, metrics = DataCondensationEngine.process_website_clusters(
+                    website_name=website_name,
+                    all_chunks=all_chunks,
+                    all_embeddings=all_embeddings,
+                    admin_id=admin_id,
+                    uploaded_by_username=update.effective_user.username or "unknown"
+                )
                 
-                # FORCE RAM REFRESH so get_tenant_files loads it immediately
-                if admin_id in context.bot_data:
-                    context.bot_data[admin_id]["file_map"] = {}
-                    
-                await query.message.edit_text(f"✅ Website data successfully locked into: {category}")
+                # 2. Save everything using the Database Manager
+                success = CondensationDatabaseManager.save_condensed_file(
+                    filename=f"Website_Crawl_{website_name}.md",
+                    knowledge_card=master_card,
+                    embedding_anchors=embedding_anchors,
+                    metrics=metrics,
+                    admin_id=admin_id,
+                    uploaded_by_id=update.effective_user.id,
+                    uploaded_by_username=update.effective_user.username or "unknown",
+                    category=category,
+                    raw_chunks=all_chunks,
+                    progress_state=progress_state
+                )
+                
+                timer_task.cancel()
+                
+                if success:
+                    if admin_id in context.bot_data:
+                        context.bot_data[admin_id]["file_map"] = {}
+                    await query.message.edit_text(
+                        f"✅ <b>Success!</b>\nSaved crawled data to <b>{category}</b>.\n⏱️ <i>Time: ~{int(metrics.processing_time_seconds)}s</i>", 
+                        parse_mode="HTML"
+                    )
+                else:
+                    await query.message.edit_text("❌ Failed to condense website data.")
             except Exception as e:
-                logger.error(f"Failed to update category in DB: {e}")
-                await query.message.edit_text(f"❌ DB Update failed: {e}")
-        else:
-            await query.message.edit_text("❌ Error: Unknown task type.")
-  
+                timer_task.cancel()
+                logger.error(f"Website condensation failed: {e}")
+                await query.message.edit_text(f"❌ Website condensation error: {e}")
+
     elif query.data == "start_onboarding":
         await disable_old_buttons()
         telegram_id = update.effective_user.id

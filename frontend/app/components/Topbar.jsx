@@ -21,6 +21,27 @@ export default function Topbar({ onMenuClick }) {
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState(null);
   const dropdownRef = useRef(null);
+  const containerRef = useRef(null); // ✅ ADD THIS
+
+  // ✅ ADD THIS ENTIRE useEffect
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     async function getProfile() {
@@ -87,7 +108,7 @@ export default function Topbar({ onMenuClick }) {
 
       {/* Profile Container (Forced to the Right using ml-auto) */}
       <div className="flex items-center ml-auto">
-        <div className="relative">
+        <div className="relative" ref={containerRef}>
           {/* Ultra-clean profile button matching the mentor's nav links */}
           <button
             onClick={toggleDropdown}
