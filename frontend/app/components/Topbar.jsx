@@ -14,6 +14,7 @@ import { supabase } from "../lib/supabase";
 import gsap from "gsap";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { clearUserCookies } from "@/app/actions/logout";
 
 export default function Topbar({ onMenuClick }) {
   const router = useRouter();
@@ -33,17 +34,21 @@ export default function Topbar({ onMenuClick }) {
 
   const handleLogout = async () => {
     try {
+      // 1. Wipe Supabase session
       await supabase.auth.signOut();
-      document.cookie.split(";").forEach((c) => {
-        document.cookie = c
-          .replace(/^ +/, "")
-          .replace(/=.*/, "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/");
-      });
+
+      // 2. Clear browser memory completely
       localStorage.clear();
-      window.location.replace("/login");
+      sessionStorage.clear();
+
+      // 3. SERVER-SIDE NUKE: Guarantee cookie deletion
+      await clearUserCookies();
+
+      // 4. Force hard redirect
+      window.location.href = "/login";
     } catch (error) {
       console.error("Logout failed:", error);
-      window.location.replace("/login");
+      window.location.href = "/login";
     }
   };
 

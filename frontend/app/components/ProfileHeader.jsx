@@ -10,6 +10,7 @@ import {
   CreditCard,
   Menu,
 } from "lucide-react";
+import { clearUserCookies } from "@/app/actions/logout";
 import { supabase } from "../lib/supabase";
 import gsap from "gsap";
 import Link from "next/link";
@@ -34,47 +35,23 @@ export default function ProfileHeader({ onMenuClick }) {
 
   const handleLogout = async () => {
     try {
-      // 1. Tell Supabase to destroy the session
+      // 1. Wipe Supabase session
       await supabase.auth.signOut();
 
-      // 2. Clear local storage entirely
+      // 2. Clear browser memory completely
       localStorage.clear();
       sessionStorage.clear();
 
-      // 3. The Production Cookie Nuke
-      // We must grab the current domain to ensure the browser actually deletes the cookie
-      const hostname = window.location.hostname;
-      const domains = [
-        hostname,
-        `.${hostname}`, // Catch subdomains
-        hostname.split(".").slice(-2).join("."), // Catch root domain (e.g. 'domain.com' from 'app.domain.com')
-        `.${hostname.split(".").slice(-2).join(".")}`,
-      ];
+      // 3. SERVER-SIDE NUKE: Guarantee cookie deletion
+      await clearUserCookies();
 
-      // List of all possible cookie prefixes your app might be using
-      const cookieNames = ["sb-access-auth-token", "supabase-auth-token"];
-
-      // Also grab any active cookies sitting in the browser
-      document.cookie.split(";").forEach((cookie) => {
-        cookieNames.push(cookie.split("=")[0].trim());
-      });
-
-      // Aggressively overwrite every cookie across every possible domain permutation
-      cookieNames.forEach((name) => {
-        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
-        domains.forEach((domain) => {
-          document.cookie = `${name}=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
-        });
-      });
-
-      // 4. Hard redirect to flush Next.js Router Cache
+      // 4. Force hard redirect
       window.location.href = "/login";
     } catch (error) {
       console.error("Logout failed:", error);
       window.location.href = "/login";
     }
   };
-
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
     if (!isOpen) {

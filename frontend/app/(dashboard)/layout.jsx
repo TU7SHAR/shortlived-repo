@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase"; // Ensure this path is correct
 import Sidebar from "../components/Sidebar"; // Ensure this path is correct
 import Topbar from "../components/Topbar"; // Ensure this path is correct
 import { SubscriptionProvider } from "../context/SubscriptionContext";
+import { clearUserCookies } from "@/app/actions/logout";
 
 export default function DashboardLayout({ children }) {
   const [isVerifying, setIsVerifying] = useState(true);
@@ -40,16 +41,18 @@ export default function DashboardLayout({ children }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Defined here so it can be called from the useEffect
   const executeHardLogout = async () => {
-    // 1. Wipe Supabase session
+    // 1. Wipe Supabase session from client
     await supabase.auth.signOut();
 
-    // 2. Wipe your custom cookie
-    document.cookie =
-      "sb-access-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+    // 2. Clear browser memory completely
+    localStorage.clear();
+    sessionStorage.clear();
 
-    // 3. NUCLEAR REDIRECT: Forces full browser reload to wipe memory
+    // 3. SERVER-SIDE NUKE: Guarantee cookie deletion
+    await clearUserCookies();
+
+    // 4. Redirect
     window.location.href = "/login";
   };
 
