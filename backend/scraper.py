@@ -197,7 +197,7 @@ def scrape_single_url(url: str, admin_id: str = None) -> dict:
         app = init_firecrawl()
         
         try:
-            # Modern Firecrawl SDK syntax (using a params dictionary)
+            # Modern Firecrawl SDK syntax
             result = app.scrape(
                 url, 
                 params={
@@ -207,7 +207,7 @@ def scrape_single_url(url: str, admin_id: str = None) -> dict:
                 }
             )
         except TypeError:
-            # YOUR Firecrawl SDK syntax (using snake_case direct arguments)
+            # YOUR Firecrawl SDK syntax
             result = app.scrape(
                 url, 
                 formats=['markdown'],
@@ -227,13 +227,17 @@ def scrape_single_url(url: str, admin_id: str = None) -> dict:
             content, truncated, processed, unprocessed = clean_and_truncate(markdown_content)
             filename = f"{title.replace(' ', '_')}_{hashlib.md5(url.encode()).hexdigest()[:6]}.md"
             
-            success, _, _ = save_to_vector_db_complete(
+            # ✅ FIX: Actually capture the chunks and vectors here instead of _, _
+            success, saved_chunks, saved_vectors = save_to_vector_db_complete(
                 filename=filename,
                 text=content,
                 admin_id=admin_id,
                 category="Web Scrape"
             )
             
+            domain = urlparse(url).netloc if "://" in url else urlparse("https://" + url).netloc
+            
+            # ✅ FIX: Return chunks, embeddings, and website_name to the handler!
             return {
                 "success": success,
                 "title": title,
@@ -242,7 +246,10 @@ def scrape_single_url(url: str, admin_id: str = None) -> dict:
                 "truncated": truncated,
                 "processed_chars": processed,
                 "unprocessed_chars": unprocessed,
-                "chunks_saved": len([c for c in content.split("\n\n") if len(c.strip()) > 10]) if success else 0
+                "chunks_saved": len(saved_chunks) if success else 0,
+                "chunks": saved_chunks,
+                "embeddings": saved_vectors,
+                "website_name": domain
             }
         else:
             return {"success": False, "url": url, "error": "No markdown content found"}
@@ -252,6 +259,9 @@ def scrape_single_url(url: str, admin_id: str = None) -> dict:
         return {"success": False, "url": url, "error": str(e)}
 
 def crawl_website_links(start_url, max_pages=20, admin_id: str = None, telegram_id: int = 0, username: str = "unknown") -> dict:
+    if not start_url.startswith(('http://', 'https://')):
+        start_url = 'https://' + start_url
+        
     visited = set()
     queue = [start_url]
     found_urls = []
@@ -342,35 +352,16 @@ def crawl_website_links(start_url, max_pages=20, admin_id: str = None, telegram_
             logger.error(f"Error crawling {current_url}: {e}")
             continue
             
-    if all_scraped_chunks:
-        try:
-            from data_condensation import DataCondensationEngine, CondensationDatabaseManager
-            logger.info("Executing Semantic Clustering Condensation on all crawled pages...")
-            
-            knowledge_card, anchors, metrics = DataCondensationEngine.process_website_clusters(
-                website_name=f"Website_Crawl_{domain}",
-                all_chunks=all_scraped_chunks,
-                all_embeddings=all_scraped_embeddings,
-                admin_id=admin_id,
-                uploaded_by_username=username
-            )
-            
-            if knowledge_card:
-                CondensationDatabaseManager.save_condensed_file(
-                    filename=f"Website_Crawl_{domain}.md",
-                    knowledge_card=knowledge_card,
-                    embedding_anchors=anchors,
-                    metrics=metrics,
-                    admin_id=admin_id,
-                    uploaded_by_id=telegram_id,
-                    uploaded_by_username=username,
-                    category="Website"
-                )
-        except Exception as e:
-            logger.error(f"Failed to condense website clusters: {e}")
-            
-    logger.info(f"Crawl complete: {len(found_urls)} pages, {total_chunks} chunks saved")
-    return {"success": True, "urls_crawled": len(found_urls), "urls": found_urls, "chunks_saved": total_chunks, "results": results}
+    logger.info(f"Crawl complete: {len(found_urls)} pages, {len(all_scraped_chunks)} chunks saved")
+    
+    return {
+        "success": True, 
+        "urls_crawled": len(found_urls), 
+        "chunks_saved": len(all_scraped_chunks), 
+        "chunks": all_scraped_chunks,
+        "embeddings": all_scraped_embeddings,
+        "website_name": domain
+    }
 
 def extract_sitemap_urls(sitemap_url, max_urls=10) -> dict:
     """Extract URLs from XML sitemap"""

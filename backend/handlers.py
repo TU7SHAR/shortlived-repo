@@ -375,7 +375,6 @@ async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @require_auth
 async def handle_crawl(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Processes scraped websites and asks for category."""
     google_id = context.user_data.get('google_id')
     
     if not context.args:
@@ -385,29 +384,27 @@ async def handle_crawl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = context.args[0]
     is_spider = len(context.args) > 1 and context.args[1].lower() == 'spider'
     
-    mode_text = "Spidering (up to 10 pages) from" if is_spider else "Scraping single page"
-    status_msg = await update.message.reply_text(f"🕸️ {mode_text} `{url}`...")
+    status_msg = await update.message.reply_text(f"🕸️ Crawling `{url}`...")
+    context.user_data.setdefault('msg_ids', []).append(status_msg.message_id)
     
     try:
         if is_spider:
-            result = crawl_website_links(
-                start_url=url, 
-                max_pages=10, 
-                admin_id=google_id, 
-                telegram_id=update.message.from_user.id, 
-                username=update.message.from_user.username or "unknown"
-            )
+            result = crawl_website_links(start_url=url, max_pages=10, admin_id=google_id)
         else:
             result = scrape_single_url(url, admin_id=google_id)
         
         if result.get('success'):
-            # THE FIX: Store a single, clean pending task
+            # THE FIX: We must explicitly pull the chunks and embeddings from the result dictionary
+            # and inject them into the pending_task state so they survive the button click.
             context.user_data['pending_task'] = {
                 "type": "crawl",
-                "data": result
+                "data": {
+                    "website_name": result.get("website_name", url.replace("https://", "").replace("http://", "")),
+                    "chunks": result.get('chunks', []),
+                    "embeddings": result.get('embeddings', [])
+                }
             }
             
-            # Ask for category
             await status_msg.edit_text(
                 f"✅ Crawl complete! Pages: {result.get('urls_crawled', 1)}\nChunks saved: {result.get('chunks_saved', 0)}\n\nSelect category:",
                 reply_markup=await get_category_keyboard()
@@ -747,21 +744,61 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await query.message.edit_text(f"❌ Error during AI processing: {e}")
         
         elif data.get("type") == "crawl":
+            crawl_data = data.get("data", {})
+            all_chunks = crawl_data.get("chunks", [])
+            all_embeddings = crawl_data.get("embeddings", [])
+            website_name = crawl_data.get("website_name", "Website_Crawl")
+            
+            if not all_chunks:
+                await query.message.edit_text("❌ Error: No data found to condense from this crawl. (Make sure scraper is returning 'chunks').")
+                return
+
+            # Initialize Live Logging State
+            progress_state = {"msg": "Initializing clustering engine..."}
+            timer_text = f"<b>Condensing Website: {website_name}</b>\n\nAI is organizing your web crawl data."
+            timer_task = asyncio.create_task(loading_animation(query.message, timer_text, progress_state))
+            
             try:
-                # FOOLPROOF FIX: Find ANY file stuck as "Website" for this admin and FORCE the new category
-                supabase.table("ingested_files").update({"category": category}).eq("category", "Website").eq("created_by", admin_id).execute()
+                from data_condensation import DataCondensationEngine, CondensationDatabaseManager
                 
-                # Update chunks just in case
-                supabase.table("file_chunks").update({"relevance_category": category}).eq("relevance_category", "Website").eq("admin_id", admin_id).execute()
+                # 1. Run the Semantic Cluster and Condensation Engine
+                master_card, embedding_anchors, metrics = DataCondensationEngine.process_website_clusters(
+                    website_name=website_name,
+                    all_chunks=all_chunks,
+                    all_embeddings=all_embeddings,
+                    admin_id=admin_id,
+                    uploaded_by_username=update.effective_user.username or "unknown"
+                )
                 
-                # FORCE RAM REFRESH so get_tenant_files loads it immediately
-                if admin_id in context.bot_data:
-                    context.bot_data[admin_id]["file_map"] = {}
-                    
-                await query.message.edit_text(f"✅ Website data successfully locked into: {category}")
+                # 2. Save everything using the Database Manager
+                success = CondensationDatabaseManager.save_condensed_file(
+                    filename=f"Website_Crawl_{website_name}.md",
+                    knowledge_card=master_card,
+                    embedding_anchors=embedding_anchors,
+                    metrics=metrics,
+                    admin_id=admin_id,
+                    uploaded_by_id=update.effective_user.id,
+                    uploaded_by_username=update.effective_user.username or "unknown",
+                    category=category,
+                    raw_chunks=all_chunks,
+                    progress_state=progress_state
+                )
+                
+                timer_task.cancel()
+                
+                if success:
+                    if admin_id in context.bot_data:
+                        context.bot_data[admin_id]["file_map"] = {}
+                    await query.message.edit_text(
+                        f"✅ <b>Success!</b>\nSaved crawled data to <b>{category}</b>.\n⏱️ <i>Time: ~{int(metrics.processing_time_seconds)}s</i>", 
+                        parse_mode="HTML"
+                    )
+                else:
+                    await query.message.edit_text("❌ Failed to condense website data.")
             except Exception as e:
-                logger.error(f"Failed to update category in DB: {e}")
-                await query.message.edit_text(f"❌ DB Update failed: {e}")
+                timer_task.cancel()
+                logger.error(f"Website condensation failed: {e}")
+                await query.message.edit_text(f"❌ Website condensation error: {e}")
         else:
             await query.message.edit_text("❌ Error: Unknown task type.")
     
@@ -784,14 +821,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data['training_turns'] = 0
         
         intro_message = (
-            " <b>Welcome to the Corporate Sales Academy</b>\n\n"
-            "This onboarding module is divided into two strict phases to ensure your success:\n\n"
-            " <b>PHASE 1: Training </b>\n"
-            "I will act as your Instructor. I will walk you through our entire product line, technical specifications, and market applications step-by-step.\n\n"
-            "⚔️ <b>PHASE 2: Real World Training</b>\n"
-            "Once you complete your lessons, I will switch into the role of a tough customer. You will have to pitch to me, handle my objections, and prove your mastery to graduate.\n\n"
-            "Until you don't prove me You are good with products i will not quit"
-            "<i>Are you ready to begin Phase 1? Reply with 'Ready' to start your first lesson!</i>"
+            "🎓 <b>Welcome to the Sales Training Module</b>\n\n"
+            "Let's get you up to speed quickly.\n\n"
+            "First, I will give you a very short, simple summary of our products and key features. "
+            "Then, I will ask you a few normal questions to make sure you understand the basics.\n\n"
+            "<i>Are you ready to begin? Reply with 'Ready' to start!</i>"
         )
         
         # Set backend state to trigger handle_training_step on the next message
@@ -1325,13 +1359,11 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
         if not untaught_files:
             metadata["phase"] = "REAL_WORLD_PHASE"
             transition_msg = (
-                "⚠️ **TRAINING MODULE COMPLETE.**\n"
-                "Initiating Real-World Applications Phase.\n\n"
-                "I will now act as a tough customer in a realistic scenario. I will give you objections, and you must pitch our products to overcome them. "
-                "I will also act as your coach and grade your responses.\n\n"
-                "**[Customer]:** 'I've heard about your products, but honestly, they seem too expensive compared to the market standard. Why should I buy from you?'"
+                "🎓 **Summary Complete.**\n\n"
+                "Now, let's do a quick knowledge check.\n\n"
+                "**[Question]:** Based on what we just reviewed, can you briefly explain our main product and one of its key features?"
             )
-            metadata = SlidingWindowMemory.add_message(metadata, "System", "Transitioned to Real-World Phase. First objection sent.")
+            metadata = SlidingWindowMemory.add_message(metadata, "System", "Transitioned to Q&A. First question sent.")
             update_user_state(t_id, mode="training", step=step+1, metadata=metadata)
             await update.message.reply_text(transition_msg, parse_mode="Markdown")
             return
@@ -1341,38 +1373,19 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
         loading_msg = await update.message.reply_text(f"📘 *Preparing lesson on {file_to_teach}...*", parse_mode="Markdown")
         
         teach_prompt = f"""
-        You are the Lead Corporate Sales Director conducting the Training Module.
+        You are a friendly Sales Trainer.
         
-        OVERALL KNOWLEDGE BASE:
-        {knowledge_base}
-        
-        FILE YOU MUST REVIEW RIGHT NOW: {file_to_teach}
-        FILE CONTENT:
+        DATA TO REVIEW: {file_to_teach}
+        CONTENT:
         {files[file_to_teach]['text']}
         
-        --- CRITICAL IDENTITY & CATEGORY CHECK ---
-        Read the file content and categorize it into one of these THREE buckets:
-        1. OUR PRODUCT: The primary, high-end offering.
-        2. DIRECT COMPETITOR: A product in the SAME industry/category but a different brand or tier.
-        3. UNRELATED / INVALID: A completely different industry or product type.
-        
-        --- INSTRUCTIONS BASED ON CATEGORY ---
-        
-        IF IT IS OUR PRODUCT:
-        1. Teach it with passion and IN HIGH DETAIL. Do not summarize briefly; explain the key specs, technical advantages, target audience, and primary selling points comprehensively so the trainee truly understands every aspect of the product.
-        2. End EXACTLY with: "Does that make sense? Type 'ok' to proceed."
-        
-        IF IT IS A DIRECT COMPETITOR (Same Category):
-        1. Teach the employee about them briefly so they know the enemy.
-        2. Explicitly state they are a competitor. 
-        3. Explain how they compare to us.
-        4. End EXACTLY with: "Does that make sense? Type 'ok' to proceed."
-        
-        IF IT IS UNRELATED / AN INVALID COMPARISON:
-        1. Do NOT teach it as a valid product or competitor.
-        2. State exactly this format: "⚠️ **INVALID COMPARISON ALERT**: There must be a mistake in our training files. Our core business is [Mention our industry], but the file '{file_to_teach}' contains information about [Mention the unrelated product]. These categories are completely not comparable, so we will skip this."
-        3. End EXACTLY with: "Type 'ok' to proceed."
-        """      
+        INSTRUCTIONS:
+        1. Write a VERY SHORT, simple, human-readable summary of the company/product (1-2 conversational sentences maximum, like you are explaining it to a friend. NO corporate jargon).
+        2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the products and the company.
+        3. List the core Products or Services clearly.
+        4. Provide 2-3 short bullet points of the key Features.
+        5. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
+        """
         
         try:
             resp = await get_groq_response(teach_prompt, files[file_to_teach]['text'], temperature=0.3)
@@ -1399,7 +1412,7 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         audit_prompt = f"""
-        You are an expert AI Sales Trainer running a live roleplay for Real-World Applications.
+        You are an expert AI Sales Trainer running a simple Q&A session.
         
         KNOWLEDGE BASE:
         {knowledge_base}
@@ -1407,28 +1420,18 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
         RECENT CONVERSATION:
         {chat_history_context}
         
-        TRAINEE'S LATEST PITCH:
+        TRAINEE'S LATEST ANSWER:
         {text}
         
-        --- CATEGORY & COMPARISON RULES (CRITICAL) ---
-        1. VALIDATE CATEGORIES: Identify the tiers of the products mentioned.
-        2. FLAG INVALID COMPARISONS: If the trainee attempts to directly compare products from mismatched categories, you MUST penalize them in the Coach Note: "Invalid Comparison: You cannot compare across different market tiers. Re-frame the customer's expectations."
-        
-        --- GRADING & PASSING LOGIC (CRITICAL) ---
-        You MUST pass the trainee if they show a basic, competent understanding of our value proposition.
-        - If the trainee successfully defends our brand using at least ONE correct fact, they PASS the scenario.
-        - If they give a solid, accurate pitch right now that defends the product, YOU MUST GRADUATE THEM immediately. Do not drag this out.
-        
-        YOUR JOB:
-        1. THE COACH: Give 1 short, encouraging sentence of feedback on their latest pitch. Explicitly call out if a comparison was invalid based on category.
-        2. THE CUSTOMER / GRADUATION: 
-           - If they failed completely, give a NEW objection.
-           - If they succeeded and proved basic competence, output EXACTLY: 'TRAINING_COMPLETE: TRUE'. Do NOT output a customer objection.
+        --- GRADING LOGIC ---
+        - If the trainee provides a generally correct answer based on the knowledge base, they PASS.
+        - If they pass, output EXACTLY: 'TRAINING_COMPLETE: TRUE'. Do NOT output another question.
+        - If they fail completely or give a wrong answer, gently correct them and ask ONE more normal, simple question.
         
         FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
-        [Coach Note]: (Your feedback here)
+        [Coach Note]: (Your 1-sentence feedback here)
         
-        [Customer]: (Your next objection here, OR write 'TRAINING_COMPLETE: TRUE')
+        [Question]: (Your next simple question here, OR write 'TRAINING_COMPLETE: TRUE')
         """    
        
         try:
@@ -1445,12 +1448,12 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
                 except Exception as e:
                     logger.error(f"Failed to update training status to completed: {e}")
 
-                clean_resp = resp.replace("TRAINING_COMPLETE: TRUE", "").replace("[Customer]:", "").strip()
+                clean_resp = resp.replace("TRAINING_COMPLETE: TRUE", "").replace("[Question]:", "").replace("[Customer]:", "").strip()
                 grad_msg = (
-                    "🎓 **OFFICIAL SALES GRADUATION REPORT**\n\n"
+                    "🎓 **TRAINING COMPLETE**\n\n"
                     f"{clean_resp}\n\n"
-                    "🎉 **EXCELLENCE VERIFICATION ACHIEVED.**\n"
-                    "You have successfully mastered the product line and objections. You are now fully authorized to proceed to the official testing module! (Type /menu)"
+                    "🎉 **Great job!**\n"
+                    "You have successfully passed the basic knowledge check. You are now authorized to take the official test! (Type /menu)"
                 )
                 await loading_msg.edit_text(grad_msg, parse_mode="Markdown")
                 if google_id:

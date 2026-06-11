@@ -10,6 +10,9 @@ from config import model
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
+import re
+import time
+
 
 try:
     from database import supabase  
@@ -48,37 +51,36 @@ class FactExtractionEngine:
     """Extracts structured facts from text chunks using Groq dynamically for ANY industry."""
     
     GENERALIZED_EXTRACTION_PROMPT = """You are a highly advanced, industry-agnostic Data Extraction AI for a Corporate Sales Assistant.
-Your job is to read the text chunk and extract the core offerings, products, services, or key informational topics into a structured JSON format.
-This system is completely generalized. It could be parsing SaaS software, vehicles, financial reports (10-K), real estate, or internal HR documents. Adapt dynamically.
-
-{
-  "catalog": [
-    {
-      "product_name": "Name of the product, service, or main topic (e.g., 'Enterprise Pro Plan', 'BMW X1', 'Q3 Revenue')",
-      "category": "Classification of the item",
-      "summary": "Brief description of the item or topic",
-      "features": ["Key detail 1", "Key detail 2"],
-      "specifications": {"key": "value", "key2": "value"} 
-    }
-  ],
-  "support_channels": ["Any emails or phone numbers found"],
-  "reference_urls": ["Any URLs found"]
-}
-
-RULES:
-1. ONLY return valid JSON. Do not include markdown wrappers like ```json.
-2. If no distinct items/topics are found, return an empty catalog array [].
-3. Keep the JSON strictly formatted so it does not truncate.
-
-TEXT CHUNK:
-{text_chunk}"""
+      CONTEXT: You are extracting data for {context_name}. All products, services, and features described below belong to this specific entity unless explicitly stated otherwise.
+      
+      Your job is to read the text chunk and extract the core offerings, products, services, or key informational topics into a structured JSON format.
+      This system is completely generalized. Adapt dynamically. Extract ANY product, service, or key topic mentioned in the text, regardless of industry.
+      {
+        "catalog": [
+          {
+            "product_name": "Name of the product, service, or main topic (e.g., 'Enterprise Pro Plan', 'BMW X1', 'Q3 Revenue')",
+            "category": "Classification of the item",
+            "summary": "Brief description of the item or topic",
+            "features": ["Key detail 1", "Key detail 2"],
+            "specifications": {"key": "value", "key2": "value"} 
+          }
+        ],
+        "support_channels": ["Any emails or phone numbers found"],
+        "reference_urls": ["Any URLs found"]
+      }
+      
+      RULES:
+      1. ONLY return valid JSON. Do not include markdown wrappers like ```json.
+      2. If no distinct items/topics are found, return an empty catalog array [].
+      3. Keep the JSON strictly formatted so it does not truncate.
+      
+      TEXT CHUNK:
+      {text_chunk}"""
 
     @staticmethod
-    def extract_facts_from_chunk(text_chunk: str, chunk_index: int, max_retries: int = 5) -> Optional[Dict[str, Any]]:
+    def extract_facts_from_chunk(text_chunk: str, chunk_index: int, context_name: str = "Unknown Context", max_retries: int = 5) -> Optional[Dict[str, Any]]:
         """Processes a chunk through Groq and dynamically reads 429 wait times."""
-        import re
-        import time
-        prompt = FactExtractionEngine.GENERALIZED_EXTRACTION_PROMPT.replace("{text_chunk}", text_chunk[:8000])
+        prompt = FactExtractionEngine.GENERALIZED_EXTRACTION_PROMPT.replace("{text_chunk}", text_chunk[:8000]).replace("{context_name}", context_name)
         
         for attempt in range(max_retries):
             try:
@@ -258,8 +260,6 @@ class AsymmetricEmbeddingGenerator:
         except Exception as e:
             logger.error(f"Failed to generate embedding anchors: {e}")
             return anchors
-            logger.error(f"Failed to generate embedding anchors: {e}")
-            return anchors
         
 # MAIN: CONDENSATION PIPELINE
 
@@ -287,15 +287,11 @@ class DataCondensationEngine:
         extracted_results = []
         
         push_log(f"Queued {len(chunks)} chunks for AI Extraction...")
-
-        chunks = DataCondensationEngine._chunk_text(raw_content)
-        
-        extracted_results = []
         logger.info(f"Extracting {len(chunks)} chunks sequentially to respect API limits...")
         
         for i, chunk in enumerate(chunks):
             push_log(f"AI Engine: Extracting facts from chunk {i+1} of {len(chunks)}...")
-            facts_dict = FactExtractionEngine.extract_facts_from_chunk(chunk, i)
+            facts_dict = FactExtractionEngine.extract_facts_from_chunk(chunk, i, context_name=filename)
             if facts_dict:
                 extracted_results.append(facts_dict)
 
@@ -382,7 +378,7 @@ class DataCondensationEngine:
         chunks = DataCondensationEngine._chunk_text(page_content)
         new_facts = []
         for i, chunk in enumerate(chunks):
-            facts = FactExtractionEngine.extract_facts_from_chunk(chunk, i)
+            facts = FactExtractionEngine.extract_facts_from_chunk(chunk, i, context_name=url)
             if facts:
                 new_facts.append(facts)
         
@@ -429,7 +425,7 @@ class DataCondensationEngine:
         with ThreadPoolExecutor(max_workers=4) as executor:
             # Submit all chunks to the thread pool
             future_to_chunk = {
-                executor.submit(FactExtractionEngine.extract_facts_from_chunk, block, i): i 
+                executor.submit(FactExtractionEngine.extract_facts_from_chunk, block, i, website_name): i 
                 for i, block in enumerate(thematic_blocks)
             }
             
