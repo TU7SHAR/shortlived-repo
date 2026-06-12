@@ -193,7 +193,7 @@ export default function KnowledgeBaseTable() {
         <h1 className="text-[1.6rem] md:text-[2rem] font-bold text-navy font-display tracking-tight">
           Knowledge Base
         </h1>
-        <p className="text-[0.95rem] text-grey-500 mt-1">
+        <p className="text-[0.95rem] text-grey-500 mt-1 pb-3">
           Manage the documents currently stored in the RAG bot's memory.
         </p>
       </div>
@@ -269,7 +269,7 @@ export default function KnowledgeBaseTable() {
                 }
                 className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                   sortConfig.filterValue === category
-                    ? "bg-navy text-white shadow-sm"
+                    ? "bg-[#1d4ed8] text-white shadow-sm"
                     : "bg-grey-50 text-grey-600 hover:bg-grey-100 hover:text-navy"
                 }`}
               >

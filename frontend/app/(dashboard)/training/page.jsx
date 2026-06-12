@@ -141,7 +141,7 @@ export default function TrainingDashboard() {
         <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
           Training Modules Overview
         </h1>
-        <p className="text-sm text-zinc-500 mt-0.5">
+        <p className="text-sm text-zinc-500 mt-0.5 py-3">
           Monitor interactive lesson milestones and trainee objection handling
           cycles.
         </p>

@@ -154,11 +154,11 @@ export default function InvitesTablePage() {
   return (
     // FIX: Removed max-w-5xl, changed to w-full with perfectly symmetrical padding
     <div className="p-6 md:p-8 w-full space-y-6">
-      <div className="mb-2">
+      <div className="mb-2 ">
         <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
           Token Management
         </h1>
-        <p className="text-sm text-zinc-500 mt-0.5">
+        <p className="text-sm text-zinc-500 mt-0.5 pb-3 pt-2">
           Detailed view of all generated access keys and their usage data.
         </p>
       </div>

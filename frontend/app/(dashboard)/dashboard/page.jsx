@@ -322,9 +322,12 @@ export default function DashboardHome() {
   //  RENDER
   // ─────────────────────────────────────────────
   return (
-    <div className="p-8 space-y-5" style={{ minHeight: "100%" }}>
+    <div
+      className="w-full flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6"
+      style={{ minHeight: "100%" }}
+    >
       {/* ── Page Header ── */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1
             className="text-[1.75rem] font-bold tracking-tight"
@@ -352,7 +355,7 @@ export default function DashboardHome() {
       </div>
 
       {/* ── Stat Cards ── */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
         {/* Total Tokens */}
         <div
           className="rounded-2xl p-5"
@@ -516,7 +519,7 @@ export default function DashboardHome() {
 
       {/* ── Search + Filter ── */}
       <div
-        className="flex items-center gap-3 rounded-2xl px-4 py-3"
+        className="flex items-center gap-3 rounded-2xl px-4 py-3 w-full"
         style={{
           background: "#fff",
           border: "1px solid #e8ecf4",
@@ -679,8 +682,8 @@ export default function DashboardHome() {
                           isRevoked
                             ? { background: "#fee2e2", color: "#dc2626" }
                             : isAdmin
-                              ? { background: "#0f172a", color: "#fff" }
-                              : { background: "#1e293b", color: "#fff" }
+                              ? { background: "#f59e0b", color: "#fff" }
+                              : { background: "#1d4ed8", color: "#fff" }
                         }
                       >
                         {isRevoked ? "Revoked" : isAdmin ? "Admin" : "User"}
@@ -746,7 +749,7 @@ export default function DashboardHome() {
                       {isConsumed && username ? (
                         <span
                           className="font-semibold"
-                          style={{ color: "#0f172a" }}
+                          style={{ color: "#1d4ed8" }}
                         >
                           @{username}
                         </span>
@@ -818,12 +821,12 @@ export default function DashboardHome() {
                               )
                             }
                             className="p-1.5 rounded-lg transition-all"
-                            style={{ color: "#cbd5e1" }}
+                            style={{ color: "#1d4ed8" }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.color = "#64748b";
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.color = "#cbd5e1";
+                              e.currentTarget.style.color = "#1d4ed8";
                             }}
                             title="More options"
                           >

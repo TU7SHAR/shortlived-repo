@@ -256,7 +256,6 @@ def get_main_menu_keyboard(role: str, mode: str):
         keyboard.append([InlineKeyboardButton("Start Test", callback_data="start_test")])
 
     if role == "admin":
-        keyboard.append([InlineKeyboardButton("Wipe All Memory", callback_data="clear_all")])
         keyboard.append([InlineKeyboardButton("Support / Help", callback_data="support_help")])
 
     return InlineKeyboardMarkup(keyboard)
@@ -556,10 +555,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         
     elif query.data == "menu_upload":
-        await query.answer("Click the Attachment icon to upload a Document.", show_alert=True)
+        await query.answer()
+        await disable_old_buttons()
+        keyboard = [[InlineKeyboardButton("Back to Menu", callback_data="back_to_main")]]
+        upload_text = (
+            "📁 <b>How to Upload Files</b>\n\n"
+            "Click the 📎 <b>Attachment/Clipboard icon</b> in your chat input area and select the file you want to upload (e.g., product manuals, PDFs, or text files).\n\n"
+            "The AI will automatically process and condense it!"
+        )
+        await send_new_msg(text=upload_text, reply_markup=InlineKeyboardMarkup(keyboard))
         
     elif query.data == "menu_crawl":
-        await query.answer("Type /crawl [url] in the chat to scrape a website.", show_alert=True)
+        await query.answer()
+        await disable_old_buttons()
+        keyboard = [[InlineKeyboardButton("Back to Menu", callback_data="back_to_main")]]
+        crawl_text = (
+            "🕸️ <b>How to Crawl a Website</b>\n\n"
+            "Type the command directly in the chat. Here are your options:\n\n"
+            "• <code>/crawl example.com</code> (Scrapes a single page)\n"
+            "• <code>/crawl example.com spider</code> (Deep search, scans up to 10 pages)\n"
+            "• <code>/crawl example.com/sitemap.xml</code> (Scrapes using the site's XML sitemap)"
+        )
+        await send_new_msg(text=crawl_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "support_help":
         await disable_old_buttons()

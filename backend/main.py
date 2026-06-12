@@ -35,7 +35,7 @@ def main() -> None:
     application.add_handler(CommandHandler("onboard", handlers.start_onboarding_command))
     application.add_handler(CommandHandler("manage", handlers.manage_files))
     application.add_handler(CommandHandler("crawl", handlers.handle_crawl))
-    application.add_handler(CommandHandler("clearhistory", handlers.clear_history_command))
+    # application.add_handler(CommandHandler("clearhistory", handlers.clear_history_command))
     application.add_handler(CommandHandler("restart", handlers.restart_command))
     application.add_handler(CommandHandler("manual", handlers.manual_command))
     # application.add_handler(CommandHandler("clearkey", handlers.clear_key_command))

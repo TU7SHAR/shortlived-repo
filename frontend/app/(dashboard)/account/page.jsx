@@ -68,7 +68,7 @@ export default function AccountPage() {
           <User size={24} className="text-primary" />
         </div>
         <div>
-          <h1 className="text-[1.8rem] md:text-[2.2rem] font-bold text-navy font-display tracking-tight leading-none mb-2.5">
+          <h1 className="text-[1.25rem] md:text-[1.5rem] font-bold text-navy font-display tracking-tight leading-none mb-2.5">
             Account Profile
           </h1>
           <p className="text-[1.05rem] text-grey-500 font-light">

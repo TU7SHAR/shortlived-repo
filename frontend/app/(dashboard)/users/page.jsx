@@ -184,7 +184,7 @@ export default function ManageUsers() {
         <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
           User Management
         </h1>
-        <p className="text-sm text-zinc-500 mt-0.5">
+        <p className="text-sm text-zinc-500 mt-0.5 py-3">
           Monitor and control who has access to your Telegram bot instances.
         </p>
       </div>
