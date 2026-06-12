@@ -113,7 +113,7 @@ export default function UserProfilePage({ params }) {
   const roleType = userData.token?.[DB.TOKENS.TOKEN_TYPE] || "Normal";
 
   return (
-    <div className="max-w-5xl mx-auto pb-10">
+    <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 min-h-full">
       {/* Navigation Header */}
       <div className="mb-8">
         <Link

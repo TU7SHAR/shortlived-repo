@@ -136,7 +136,7 @@ export default function TrainingDashboard() {
 
   return (
     // FIX: Converted container element wrapper to complete layout fluid grid symmetry bounds
-    <div className="p-6 md:p-8 w-full space-y-6">
+    <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 space-y-6 min-h-full">
       <div className="mb-2">
         <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
           Training Modules Overview

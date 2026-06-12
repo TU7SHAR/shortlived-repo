@@ -97,7 +97,7 @@ export default function TrainingDetail() {
 
   return (
     // FIX: Replaced tight max-width bounds with 100% layout fluid dashboard width constraints
-    <div className="p-6 md:p-8 w-full space-y-6">
+    <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 space-y-6 min-h-full">
       {/* Dynamic Header Interaction Row */}
       <div className="flex justify-between items-center mb-2">
         <button

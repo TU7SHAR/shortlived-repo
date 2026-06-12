@@ -188,7 +188,7 @@ export default function KnowledgeBaseTable() {
   }
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 space-y-6 min-h-full">
       <div className="mb-2">
         <h1 className="text-[1.6rem] md:text-[2rem] font-bold text-navy font-display tracking-tight md:pt-4">
           Knowledge Base

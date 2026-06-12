@@ -93,7 +93,7 @@ export default function BotSettings() {
   }
 
   return (
-    <div className="p-6 md:p-8 w-full max-w-4xl space-y-8">
+    <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 space-y-8 min-h-full">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>

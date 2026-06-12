@@ -68,7 +68,7 @@ export default function TenantFeedbackPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 w-full space-y-8">
+    <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 space-y-8 min-h-full">
       {/* Upper Content Header Frame */}
       <div>
         <h1 className="text-[1.6rem] md:text-[2rem] font-bold text-navy font-display tracking-tight flex items-center gap-3 mb-2">

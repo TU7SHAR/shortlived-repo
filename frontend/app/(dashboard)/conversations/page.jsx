@@ -110,7 +110,7 @@ export default function ConversationsPage() {
   }
 
   return (
-    <div className="w-full h-[calc(100vh-68px)] flex flex-col p-4 md:p-6 lg:p-8">
+    <div className="w-full flex-1 h-[calc(100vh-68px)] flex flex-col px-6 lg:px-10 xl:px-12 py-6 sm:py-8">
       {/* Page Title Header block */}
       <div className="mb-6 shrink-0">
         <h1 className="text-[1.6rem] md:text-[2rem] font-bold text-navy font-display tracking-tight flex items-center gap-3 mb-1">

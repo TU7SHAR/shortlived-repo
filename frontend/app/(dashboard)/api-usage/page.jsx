@@ -145,7 +145,7 @@ export default function ApiUsagePage() {
   }
 
   return (
-    <div className="p-6 md:p-8 w-full space-y-8">
+    <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 space-y-8 min-h-full">
       {/* Upper Information Header Grid */}
       <div className="flex flex-col sm:flex-row gap-5 justify-between items-start sm:items-center">
         <div>

@@ -70,7 +70,7 @@ export default function ManagePlanPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-10 px-4 md:px-8">
+    <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 min-h-full">
       {/* Header Section */}
       <div className="mb-10 text-center max-w-2xl mx-auto pt-8">
         <div className="flex justify-center mb-6">
