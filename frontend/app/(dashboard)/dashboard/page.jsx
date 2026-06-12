@@ -323,7 +323,7 @@ export default function DashboardHome() {
   // ─────────────────────────────────────────────
   return (
     <div
-      className="w-full flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6"
+      className="w-full flex-1 px-8 lg:px-12 py-6 sm:py-8 space-y-6"
       style={{ minHeight: "100%" }}
     >
       {/* ── Page Header ── */}
