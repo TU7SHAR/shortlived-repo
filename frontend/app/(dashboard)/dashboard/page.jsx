@@ -21,6 +21,7 @@ import {
   ArrowUpRight,
   ChevronDown,
   MoreVertical,
+  LayoutDashboard,
 } from "lucide-react";
 import gsap from "gsap";
 import { DB } from "@/app/lib/schema_map";
@@ -329,10 +330,10 @@ export default function DashboardHome() {
       {/* ── Page Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1
-            className="text-[1.75rem] font-bold tracking-tight"
-            style={{ color: "#0f172a" }}
-          >
+          <h1 className="text-[1.6rem] md:text-[2rem] font-bold text-navy font-display tracking-tight flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 rounded-[10px] bg-primary-light flex items-center justify-center shrink-0">
+              <LayoutDashboard size={22} className="text-primary" />
+            </div>
             Access Tokens
           </h1>
           <p className="text-sm mt-0.5" style={{ color: "#94a3b8" }}>

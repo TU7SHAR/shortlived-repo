@@ -23,7 +23,6 @@ export default function Topbar({ onMenuClick }) {
   const dropdownRef = useRef(null);
   const containerRef = useRef(null); // ✅ ADD THIS
 
-  // ✅ ADD THIS ENTIRE useEffect
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (

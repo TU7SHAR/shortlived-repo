@@ -181,7 +181,10 @@ export default function ManageUsers() {
     // FIX: Fluid layout width configuration with symmetrical wrapper bounds
     <div className="w-full flex-1 px-6 lg:px-10 xl:px-12 py-6 sm:py-8 space-y-6 min-h-full">
       <div className="mb-2">
-        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
+        <h1 className="text-[1.6rem] md:text-[2rem] font-bold text-navy font-display tracking-tight flex items-center gap-3 mb-1">
+          <div className="w-10 h-10 rounded-[10px] bg-primary-light flex items-center justify-center shrink-0">
+            <Users size={22} className="text-primary" />
+          </div>
           User Management
         </h1>
         <p className="text-sm text-zinc-500 mt-0.5 py-3">

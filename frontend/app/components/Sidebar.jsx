@@ -100,7 +100,6 @@ function SidebarHeader({ onClose }) {
         href="/dashboard"
         className="flex items-center gap-2.5 text-navy font-display font-bold text-[1.4rem] tracking-tight decoration-transparent"
       >
-        {/* Mentor's EXACT logo replica using CSS geometry */}
         <div className="w-[36px] h-[36px] bg-primary rounded-[9px] flex items-center justify-center relative overflow-hidden shrink-0">
           <div className="absolute w-[20px] h-[20px] border-[2.5px] border-white rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-[58%]"></div>
           <div className="absolute w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] border-t-white bottom-[7px] left-1/2 -translate-x-1/2"></div>
