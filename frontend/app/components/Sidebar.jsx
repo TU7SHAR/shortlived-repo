@@ -97,7 +97,7 @@ function SidebarHeader({ onClose }) {
   return (
     <div className="h-[68px] flex items-center justify-between px-6 border-b border-grey-100 shrink-0">
       <Link
-        href="/dashboard"
+        href="/"
         className="flex items-center gap-2.5 text-navy font-display font-bold text-[1.4rem] tracking-tight decoration-transparent"
       >
         <div className="w-[36px] h-[36px] bg-primary rounded-[9px] flex items-center justify-center relative overflow-hidden shrink-0">

@@ -15,8 +15,8 @@ export default function HomePage() {
   const container = useRef(null);
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Handle Navbar shadow on scroll
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
@@ -25,58 +25,60 @@ export default function HomePage() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Smooth scroll animations replacing the old IntersectionObserver
   useGSAP(
     () => {
-      gsap.utils.toArray(".fade-in").forEach((element) => {
-        gsap.fromTo(
-          element,
-          { opacity: 0, y: 30 },
-          {
-            scrollTrigger: {
-              trigger: element,
-              start: "top 85%",
+      const timer = setTimeout(() => {
+        gsap.utils.toArray(".fade-in").forEach((element) => {
+          gsap.fromTo(
+            element,
+            { opacity: 0, y: 30 },
+            {
+              scrollTrigger: {
+                trigger: element,
+                start: "top 85%",
+              },
+              opacity: 1,
+              y: 0,
+              duration: 0.8,
+              ease: "power3.out",
             },
+          );
+        });
+
+        gsap.fromTo(
+          ".chat-mockup",
+          { opacity: 0, y: 40 },
+          { opacity: 1, y: 0, duration: 1, ease: "power4.out", delay: 0.1 },
+        );
+
+        gsap.fromTo(
+          ".msg",
+          { opacity: 0, y: 10 },
+          {
             opacity: 1,
             y: 0,
-            duration: 0.8,
-            ease: "power3.out",
+            duration: 0.5,
+            stagger: 0.4,
+            ease: "power2.out",
+            delay: 0.4,
           },
         );
-      });
 
-      // Hero specific animations
-      gsap.fromTo(
-        ".chat-mockup",
-        { opacity: 0, y: 40 },
-        { opacity: 1, y: 0, duration: 1, ease: "power4.out", delay: 0.2 },
-      );
+        gsap.fromTo(
+          ".float-badge",
+          { opacity: 0, scale: 0.8 },
+          {
+            opacity: 1,
+            scale: 1,
+            duration: 0.6,
+            stagger: 0.3,
+            ease: "back.out(1.5)",
+            delay: 1.5,
+          },
+        );
+      }, 100);
 
-      gsap.fromTo(
-        ".msg",
-        { opacity: 0, y: 10 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.5,
-          stagger: 0.4,
-          ease: "power2.out",
-          delay: 0.6,
-        },
-      );
-
-      gsap.fromTo(
-        ".float-badge",
-        { opacity: 0, scale: 0.8 },
-        {
-          opacity: 1,
-          scale: 1,
-          duration: 0.6,
-          stagger: 0.3,
-          ease: "back.out(1.5)",
-          delay: 2,
-        },
-      );
+      return () => clearTimeout(timer);
     },
     { scope: container },
   );
@@ -86,7 +88,6 @@ export default function HomePage() {
       ref={container}
       className="font-sans text-slate-800 bg-white overflow-x-hidden selection:bg-blue-200 selection:text-blue-900"
     >
-      {/* ── NAV ── */}
       <nav
         className={`fixed top-0 left-0 right-0 z-[100] bg-white/90 backdrop-blur-md border-b border-slate-200/50 transition-all duration-300 ${scrolled ? "shadow-[0_2px_20px_rgba(10,22,40,0.06)]" : ""}`}
       >
@@ -95,7 +96,6 @@ export default function HomePage() {
             href="/"
             className="flex items-center gap-2.5 text-xl font-extrabold text-[#0A1628] tracking-tight"
           >
-            {/* SVG Logo recreated in Tailwind */}
             <div className="w-[36px] h-[36px] bg-blue-700 rounded-[9px] flex items-center justify-center relative overflow-hidden shrink-0">
               <div className="absolute w-[20px] h-[20px] border-[2.5px] border-white rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-[58%]"></div>
               <div className="absolute w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] border-t-white bottom-[7px] left-1/2 -translate-x-1/2"></div>
@@ -141,12 +141,21 @@ export default function HomePage() {
           </ul>
 
           <div className="hidden md:flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              Login
-            </Link>
+            {isLoggedIn ? (
+              <Link
+                href="/dashboard"
+                className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
+              >
+                Login
+              </Link>
+            )}
             <Link
               href="/contact"
               className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2.5 rounded-[9px] shadow-[0_2px_8px_rgba(29,78,216,0.25)] hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)] hover:-translate-y-[1px] transition-all flex items-center gap-1.5"
@@ -157,7 +166,7 @@ export default function HomePage() {
 
           <button
             className="md:hidden flex flex-col gap-[5px] p-1"
-            aria-label="Menu"
+            aria-label="Open mobile menu"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             <span
@@ -173,7 +182,6 @@ export default function HomePage() {
         </div>
       </nav>
 
-      {/* ── MOBILE MENU ── */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-[99] bg-white pt-[80px] px-6 pb-8 flex flex-col gap-2 md:hidden">
           <Link
@@ -205,12 +213,21 @@ export default function HomePage() {
             Contact
           </Link>
           <div className="mt-4 flex flex-col gap-3">
-            <Link
-              href="/login"
-              className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
-            >
-              Login
-            </Link>
+            {isLoggedIn ? (
+              <Link
+                href="/dashboard"
+                className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
+              >
+                Login
+              </Link>
+            )}
             <Link
               href="/contact"
               className="text-center font-semibold p-4 bg-blue-700 text-white rounded-xl"
@@ -222,9 +239,7 @@ export default function HomePage() {
       )}
 
       <main>
-        {/* ── HERO ── */}
         <section className="relative pt-[148px] px-6 pb-[100px] bg-gradient-to-br from-white via-[#EFF6FF] to-[#F0F9FF] overflow-hidden">
-          {/* Background Gradients */}
           <div className="absolute -top-[200px] -right-[200px] w-[700px] h-[700px] bg-[radial-gradient(circle,rgba(59,130,246,0.12)_0%,transparent_70%)] pointer-events-none"></div>
           <div className="absolute -bottom-[100px] -left-[100px] w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(6,182,212,0.08)_0%,transparent_70%)] pointer-events-none"></div>
 
@@ -279,7 +294,6 @@ export default function HomePage() {
             </div>
 
             <div className="relative flex justify-center lg:justify-end">
-              {/* Chat Mockup */}
               <div className="chat-mockup bg-white rounded-[20px] shadow-[0_16px_48px_rgba(10,22,40,0.16)] border border-slate-300/50 overflow-hidden w-full max-w-[420px]">
                 <div className="bg-[#25D366] px-5 py-4 flex items-center gap-3">
                   <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center font-extrabold text-[#25D366] text-sm shrink-0">
@@ -354,7 +368,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Floating Badges */}
               <div className="float-badge absolute -top-4 -right-5 bg-white rounded-xl p-2.5 pr-4 shadow-[0_4px_24px_rgba(10,22,40,0.1)] border border-slate-100 flex items-center gap-2.5 text-[0.82rem] font-medium text-[#0A1628]">
                 <div className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center text-base">
                   🚀
@@ -375,7 +388,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── LOGOS ── */}
         <div className="py-12 px-6 border-b border-slate-100">
           <div className="max-w-[1200px] mx-auto text-center">
             <p className="text-[0.82rem] text-slate-500 tracking-[0.06em] uppercase font-medium mb-7">
@@ -401,7 +413,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ── HOW IT WORKS ── */}
         <section className="py-24 px-6 bg-slate-50">
           <div className="max-w-[1200px] mx-auto">
             <div className="text-center mb-16 fade-in">
@@ -473,7 +484,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── FEATURES PREVIEW ── */}
         <section className="py-24 px-6 bg-white">
           <div className="max-w-[1200px] mx-auto">
             <div className="mb-16 fade-in">
@@ -492,7 +502,6 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Featured Double Card */}
               <div className="lg:col-span-2 bg-gradient-to-br from-[#0A1628] to-[#122040] rounded-[12px] p-8 md:p-12 grid grid-cols-1 md:grid-cols-2 gap-10 items-center fade-in hover:-translate-y-1 transition-transform shadow-lg">
                 <div>
                   <div className="w-12 h-12 rounded-[13px] bg-blue-500/20 flex items-center justify-center text-[1.3rem] mb-5">
@@ -532,7 +541,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Standard Feature Cards */}
               <div className="bg-slate-50 border border-slate-100 rounded-[12px] p-8 hover:border-blue-500/30 hover:shadow-[0_4px_24px_rgba(10,22,40,0.1)] hover:-translate-y-1 transition-all fade-in">
                 <div className="w-12 h-12 rounded-[13px] bg-blue-50 flex items-center justify-center text-[1.3rem] mb-5">
                   🛡️
@@ -612,7 +620,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── CHANNELS ── */}
         <section className="py-24 px-6 bg-slate-50">
           <div className="max-w-[1200px] mx-auto">
             <div className="text-center mb-16 fade-in">
@@ -682,7 +689,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── STATS ── */}
         <div className="bg-gradient-to-br from-[#0A1628] to-[#122040] py-20 px-6">
           <div className="max-w-[1200px] mx-auto grid grid-cols-2 md:grid-cols-4 gap-10 text-center">
             <div className="fade-in">
@@ -720,7 +726,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ── TESTIMONIALS ── */}
         <section className="py-24 px-6 bg-white">
           <div className="max-w-[1200px] mx-auto">
             <div className="text-center mb-16 fade-in">
@@ -805,7 +810,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── CTA BANNER ── */}
         <section className="bg-gradient-to-br from-blue-700 via-[#1e40af] to-[#0A1628] py-24 px-6 relative overflow-hidden">
           <div className="absolute -top-[150px] -right-[150px] w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(255,255,255,0.08)_0%,transparent_70%)]"></div>
           <div className="max-w-[720px] mx-auto text-center relative z-10 fade-in">
@@ -837,7 +841,6 @@ export default function HomePage() {
         </section>
       </main>
 
-      {/* ── FOOTER ── */}
       <footer className="bg-[#0A1628] text-white/60 pt-16 px-6 pb-8">
         <div className="max-w-[1200px] mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 mb-12">
