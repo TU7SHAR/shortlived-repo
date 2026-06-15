@@ -5,7 +5,6 @@ export const viewport = {
   themeColor: "#09090b",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
 };
 
 // 1. Safely parse the URL. Fallback to localhost if the env var is missing during build.
