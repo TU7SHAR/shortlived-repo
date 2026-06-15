@@ -1,12 +1,12 @@
-import { siteConfig } from "./utils/config";
-
 export default function robots() {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
   return {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin/", "/(dashboard)/", "/api/", "/account/", "/(auth)/"],
+      disallow: ["/admin/", "/api/"],
     },
-    sitemap: `${siteConfig.url}/sitemap.xml`,
+    sitemap: `${baseUrl}/sitemap.xml`,
   };
 }
