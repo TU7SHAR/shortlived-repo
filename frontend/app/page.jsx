@@ -161,24 +161,26 @@ export default function HomePage() {
             {isLoggedIn ? (
               <Link
                 href="/dashboard"
-                className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
+                className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2.5 rounded-[9px] shadow-[0_2px_8px_rgba(29,78,216,0.25)] hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)] hover:-translate-y-[1px] transition-all flex items-center gap-1.5"
               >
-                Dashboard
+                Dashboard &rarr;
               </Link>
             ) : (
-              <Link
-                href="/login"
-                className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
-              >
-                Login
-              </Link>
+              <>
+                <Link
+                  href="/login"
+                  className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/contact"
+                  className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2.5 rounded-[9px] shadow-[0_2px_8px_rgba(29,78,216,0.25)] hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)] hover:-translate-y-[1px] transition-all flex items-center gap-1.5"
+                >
+                  Book a Demo &rarr;
+                </Link>
+              </>
             )}
-            <Link
-              href="/contact"
-              className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2.5 rounded-[9px] shadow-[0_2px_8px_rgba(29,78,216,0.25)] hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)] hover:-translate-y-[1px] transition-all flex items-center gap-1.5"
-            >
-              Book a Demo &rarr;
-            </Link>
           </div>
 
           <button
@@ -233,24 +235,26 @@ export default function HomePage() {
             {isLoggedIn ? (
               <Link
                 href="/dashboard"
-                className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
+                className="text-center font-semibold p-4 bg-blue-700 text-white rounded-xl"
               >
-                Dashboard
+                Dashboard &rarr;
               </Link>
             ) : (
-              <Link
-                href="/login"
-                className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
-              >
-                Login
-              </Link>
+              <>
+                <Link
+                  href="/login"
+                  className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/contact"
+                  className="text-center font-semibold p-4 bg-blue-700 text-white rounded-xl"
+                >
+                  Book a Demo &rarr;
+                </Link>
+              </>
             )}
-            <Link
-              href="/contact"
-              className="text-center font-semibold p-4 bg-blue-700 text-white rounded-xl"
-            >
-              Book a Demo &rarr;
-            </Link>
           </div>
         </div>
       )}
