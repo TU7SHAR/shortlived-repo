@@ -193,15 +193,18 @@ def get_tenant_files(context: ContextTypes.DEFAULT_TYPE):
                 fname = f["filename"]
                 category = f["category"]
                 
-                # Fetch JSON Card
+                # Fetch JSON Card(s) — a file may have multiple condensed cards
                 cards_res = supabase.table("condensed_knowledge_cards").select("*").eq("file_name", fname).execute()
                 full_text = ""
                 if cards_res.data:
-                    card = cards_res.data[0]
-                    content = card.get("card_json") or card.get("card_data") or card.get("content")
-                    if content:
-                        import json
-                        full_text = json.dumps(content) if isinstance(content, dict) else str(content)
+                    import json
+                    card_texts = []
+                    for card in cards_res.data:
+                        content = card.get("card_json") or card.get("card_data") or card.get("content")
+                        if content:
+                            card_text = json.dumps(content) if isinstance(content, dict) else str(content)
+                            card_texts.append(card_text)
+                    full_text = "\n".join(card_texts)
                 
                 ram_files[fname] = {
                     "filename": fname,
@@ -1376,9 +1379,21 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
         # If they haven't acknowledged and ask a question during the lecture
         if len(metadata["taught_files"]) > 0 and not user_acknowledged and len(text.split()) > 3:
             loading_msg = await update.message.reply_text(" *Answering your question...*", parse_mode="Markdown")
-            qa_prompt = f"You are a Sales Instructor. Answer the trainee's question briefly using the knowledge base.\n\nKB: {knowledge_base}\nQuestion: {text}"
+            
+            # Build rich context: condensed cards + vector search (raw chunks + asymmetric anchors)
+            qa_context = knowledge_base
+            if google_id:
+                query_vector = get_embedding(text)
+                if query_vector:
+                    matches = search_knowledge_base(query_vector, threshold=0.3, limit=5)
+                    if matches:
+                        qa_context += "\n\n=== ADDITIONAL RELEVANT DATA FROM VECTOR SEARCH ==="
+                        for match in matches:
+                            qa_context += f"\n[Source: {match['file_name']}] {match['content']}"
+            
+            qa_prompt = f"You are a Sales Instructor. Answer the trainee's question using the knowledge base below. If the answer exists in the data, provide it clearly.\n\nKB: {qa_context}\nQuestion: {text}"
             try:
-                resp = await get_groq_response(qa_prompt, knowledge_base, temperature=0.3)
+                resp = await get_groq_response(qa_prompt, qa_context, temperature=0.3)
                 metadata = SlidingWindowMemory.add_message(metadata, "Instructor", resp)
                 update_user_state(t_id, mode="training", step=step+1, metadata=metadata)
                 await loading_msg.edit_text(resp + "\n\n*(Type 'ok' to continue the lesson)*")
