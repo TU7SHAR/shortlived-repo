@@ -1364,8 +1364,8 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
     # ========== TRAINING MODULE (PYTHON CONTROLLED) ==========
     if metadata["phase"] == "TRAINING_PHASE":
         
-        # Training only teaches OUR PRODUCTS — competitors handled in normal chat/tests
-        training_files = list(our_product_files.keys())
+        # Training order: Our Products FIRST, then Competitors. Skip irrelevant files.
+        training_files = list(our_product_files.keys()) + list(competitor_files.keys())
         our_files = training_files
 
         # Identify what hasn't been taught yet
@@ -1389,40 +1389,72 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
                 await loading_msg.edit_text("Error answering. Type 'ok' to skip.")
                 return
 
-        # If NO files left to teach, trigger Real-World Phase!
+        # If NO files left to teach, training is COMPLETE
         if not untaught_files:
-            metadata["phase"] = "REAL_WORLD_PHASE"
-            transition_msg = (
-                "🎓 **Summary Complete.**\n\n"
-                "Now, let's do a quick knowledge check.\n\n"
-                "**[Question]:** Based on what we just reviewed, can you briefly explain our main product and one of its key features?"
+            update_user_state(t_id, mode="use", step=0, metadata={})
+            
+            try:
+                supabase.table("onboarding_leads") \
+                    .update({"training_status": "completed"}) \
+                    .eq("telegram_id", t_id) \
+                    .execute()
+            except Exception as e:
+                logger.error(f"Failed to update training status to completed: {e}")
+            
+            completion_msg = (
+                "🎓 **Training Complete!**\n\n"
+                "You've been briefed on all our products. You're now ready to use the assistant or take the test.\n\n"
+                "Type /menu to continue."
             )
-            metadata = SlidingWindowMemory.add_message(metadata, "System", "Transitioned to Q&A. First question sent.")
-            update_user_state(t_id, mode="training", step=step+1, metadata=metadata)
+            await update.message.reply_text(completion_msg, parse_mode="Markdown")
+            if google_id:
+                log_chat_interaction(t_id, username, text, "TRAINING COMPLETE", google_id, mode="training")
+            return
             await update.message.reply_text(transition_msg, parse_mode="Markdown")
             return
 
         # If there ARE files left, teach the NEXT file in the list
         file_to_teach = untaught_files[0]
-        file_text = our_product_files[file_to_teach]['text']
         
-        loading_msg = await update.message.reply_text(f"📘 *Preparing lesson on {file_to_teach}...*", parse_mode="Markdown")
+        # Determine if this is OUR product or a COMPETITOR
+        is_our_product = file_to_teach in our_product_files
+        file_data = our_product_files.get(file_to_teach) or competitor_files.get(file_to_teach)
+        file_text = file_data['text'] if file_data else ""
         
-        teach_prompt = f"""
-        You are a friendly Sales Trainer. You are training a salesperson about OUR company's products.
-        
-        DATA TO REVIEW: {file_to_teach}
-        CONTENT:
-        {file_text}
-        
-        INSTRUCTIONS:
-        1. Write a VERY SHORT, simple, human-readable summary of the company/product (1-2 conversational sentences maximum, like you are explaining it to a friend. NO corporate jargon).
-        2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the products and the company.
-        3. These are OUR products — present them positively and with pride.
-        4. List the core Products or Services clearly.
-        5. Provide 2-3 short bullet points of the key Features.
-        6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
-        """
+        if is_our_product:
+            loading_msg = await update.message.reply_text(f"📘 *Preparing lesson on {file_to_teach}...*", parse_mode="Markdown")
+            teach_prompt = f"""
+            You are a friendly Sales Trainer. You are training a salesperson about OUR company's products.
+            
+            DATA TO REVIEW: {file_to_teach}
+            CONTENT:
+            {file_text}
+            
+            INSTRUCTIONS:
+            1. Write a VERY SHORT, simple, human-readable summary of the company/product (1-2 conversational sentences maximum, like you are explaining it to a friend. NO corporate jargon).
+            2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the products and the company.
+            3. These are OUR products — present them positively and with pride.
+            4. List the core Products or Services clearly.
+            5. Provide 2-3 short bullet points of the key Features.
+            6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
+            """
+        else:
+            loading_msg = await update.message.reply_text(f"⚔️ *Know your competition: {file_to_teach}...*", parse_mode="Markdown")
+            teach_prompt = f"""
+            You are a friendly Sales Trainer. You are now teaching a salesperson about a COMPETITOR so they know what they're up against in the market.
+            
+            COMPETITOR DATA: {file_to_teach}
+            CONTENT:
+            {file_text}
+            
+            INSTRUCTIONS:
+            1. Write a VERY SHORT summary of what this competitor offers (1-2 sentences, neutral tone).
+            2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the competitor.
+            3. List their main products/services.
+            4. Provide 2-3 bullet points of their key strengths.
+            5. Then add a "How to counter" section — give 1-2 actionable tips on how to handle a customer who mentions this competitor.
+            6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
+            """
         
         try:
             resp = await get_groq_response(teach_prompt, file_text, temperature=0.3)
@@ -1436,75 +1468,6 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
                 log_chat_interaction(t_id, username, text, resp, google_id, mode="training")
         except Exception as e:
             await loading_msg.edit_text("Error generating lesson. Please type 'ok' to retry.")
-        return
-
-    # ========== REAL-WORLD APPLICATIONS (ROLEPLAY) ==========
-    if metadata["phase"] == "REAL_WORLD_PHASE":
-        loading_msg = await update.message.reply_text("⚖️ *Analyzing your pitch...*", parse_mode="Markdown")
-        
-        chat_history_context, metadata = SlidingWindowMemory.get_context_for_llm(
-            metadata, 
-            telegram_id=t_id, 
-            max_lines=6
-        )
-
-        audit_prompt = f"""
-        You are an expert AI Sales Trainer running a simple Q&A session.
-        
-        KNOWLEDGE BASE:
-        {knowledge_base}
-        
-        RECENT CONVERSATION:
-        {chat_history_context}
-        
-        TRAINEE'S LATEST ANSWER:
-        {text}
-        
-        --- GRADING LOGIC ---
-        - If the trainee provides a generally correct answer based on the knowledge base, they PASS.
-        - If they pass, output EXACTLY: 'TRAINING_COMPLETE: TRUE'. Do NOT output another question.
-        - If they fail completely or give a wrong answer, gently correct them and ask ONE more normal, simple question.
-        
-        FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
-        [Coach Note]: (Your 1-sentence feedback here)
-        
-        [Question]: (Your next simple question here, OR write 'TRAINING_COMPLETE: TRUE')
-        """    
-       
-        try:
-            resp = await get_groq_response(audit_prompt, knowledge_base, temperature=0.3)
-            
-            if "TRAINING_COMPLETE: TRUE" in resp:
-                update_user_state(t_id, mode="use", step=0, metadata={})
-                
-                try:
-                    supabase.table("onboarding_leads") \
-                        .update({"training_status": "completed"}) \
-                        .eq("telegram_id", t_id) \
-                        .execute()
-                except Exception as e:
-                    logger.error(f"Failed to update training status to completed: {e}")
-
-                clean_resp = resp.replace("TRAINING_COMPLETE: TRUE", "").replace("[Question]:", "").replace("[Customer]:", "").strip()
-                grad_msg = (
-                    "🎓 **TRAINING COMPLETE**\n\n"
-                    f"{clean_resp}\n\n"
-                    "🎉 **Great job!**\n"
-                    "You have successfully passed the basic knowledge check. You are now authorized to take the official test! (Type /menu)"
-                )
-                await loading_msg.edit_text(grad_msg, parse_mode="Markdown")
-                if google_id:
-                    log_chat_interaction(t_id, username, text, "GRADUATION", google_id, mode="training")
-                return
-            
-            metadata = SlidingWindowMemory.add_message(metadata, "System", resp)
-            update_user_state(t_id, mode="training", step=step+1, metadata=metadata)
-            await loading_msg.edit_text(resp)
-            if google_id:
-                log_chat_interaction(t_id, username, text, resp, google_id, mode="training")
-                
-        except Exception as e:
-            await loading_msg.edit_text("Error generating scenario. Please type your response again.")
         return
     
 @require_auth
