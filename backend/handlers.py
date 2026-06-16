@@ -1647,9 +1647,44 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # =====================================================================
     # PHASE 2 & 3: KNOWLEDGE BASE & SMART RERANKING
     # =====================================================================
+    # Category-aware context injection: Label each file so the LLM knows
+    # what belongs to US vs COMPETITORS vs irrelevant noise.
+    VALID_CATEGORIES = {"Our Products", "Competitor Products", "Price Lists"}
+    
     if files:
+        our_products_context = ""
+        competitor_context = ""
+        price_context = ""
+        
         for name, data in files.items():
-            full_context += f"\n\n--- SOURCE: {name} ---\n{data['text']}"
+            category = data.get('category', 'Our Products')
+            file_text = data.get('text', '')
+            
+            # Skip files with no valid category (irrelevant uploads)
+            if category not in VALID_CATEGORIES:
+                logger.info(f"Skipping file '{name}' — unrecognized category: '{category}'")
+                continue
+            
+            if not file_text.strip():
+                continue
+                
+            if category == "Our Products":
+                our_products_context += f"\n\n--- OUR PRODUCT FILE: {name} ---\n{file_text}"
+            elif category == "Competitor Products":
+                competitor_context += f"\n\n--- COMPETITOR FILE: {name} ---\n{file_text}"
+            elif category == "Price Lists":
+                price_context += f"\n\n--- PRICE LIST FILE: {name} ---\n{file_text}"
+        
+        # Inject OUR products FIRST (highest priority for LLM attention)
+        if our_products_context:
+            full_context += "\n\n=== OUR COMPANY'S PRODUCTS (PITCH THESE AGGRESSIVELY) ===" + our_products_context
+            has_data = True
+        if price_context:
+            full_context += "\n\n=== OUR PRICE LISTS (USE FOR ANCHORING & VALUE DEFENSE) ===" + price_context
+            has_data = True
+        # Competitor data LAST and clearly marked
+        if competitor_context:
+            full_context += "\n\n=== COMPETITOR DATA (USE ONLY TO COUNTER OBJECTIONS — NEVER PITCH THESE) ===" + competitor_context
             has_data = True
     
     if google_id:
