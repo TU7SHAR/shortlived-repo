@@ -1343,13 +1343,29 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
     metadata = SlidingWindowMemory.add_message(metadata, "Trainee", text)
 
     files = get_tenant_files(context)
-    knowledge_base = "".join([f"\n--- DATA FILE: {name} ---\n{data['text']}" for name, data in files.items()])
+    
+    # Category-aware: Only train on OUR products. Competitors/Price Lists are reference only.
+    our_product_files = {name: data for name, data in files.items() if data.get('category') == 'Our Products'}
+    competitor_files = {name: data for name, data in files.items() if data.get('category') == 'Competitor Products'}
+    price_files = {name: data for name, data in files.items() if data.get('category') == 'Price Lists'}
+    
+    # Knowledge base for Q&A includes everything (labeled), but training only covers OUR products
+    knowledge_base = ""
+    if our_product_files:
+        knowledge_base += "\n=== OUR PRODUCTS (TEACH AND PITCH THESE) ==="
+        knowledge_base += "".join([f"\n--- OUR PRODUCT: {name} ---\n{data['text']}" for name, data in our_product_files.items()])
+    if price_files:
+        knowledge_base += "\n=== PRICE LISTS (USE FOR VALUE DEFENSE) ==="
+        knowledge_base += "".join([f"\n--- PRICE LIST: {name} ---\n{data['text']}" for name, data in price_files.items()])
+    if competitor_files:
+        knowledge_base += "\n=== COMPETITOR DATA (REFERENCE ONLY — NEVER PITCH THESE) ==="
+        knowledge_base += "".join([f"\n--- COMPETITOR: {name} ---\n{data['text']}" for name, data in competitor_files.items()])
 
     # ========== TRAINING MODULE (PYTHON CONTROLLED) ==========
     if metadata["phase"] == "TRAINING_PHASE":
         
-        # Pass all files so the AI's prompt intelligence can filter out competitors logically
-        our_files = list(files.keys())
+        # Only teach files that are OUR PRODUCTS — skip competitors and irrelevant uploads
+        our_files = list(our_product_files.keys())
 
         # Identify what hasn't been taught yet
         untaught_files = [f for f in our_files if f not in metadata["taught_files"]]
@@ -1390,22 +1406,23 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
         loading_msg = await update.message.reply_text(f"📘 *Preparing lesson on {file_to_teach}...*", parse_mode="Markdown")
         
         teach_prompt = f"""
-        You are a friendly Sales Trainer.
+        You are a friendly Sales Trainer. You are training a salesperson about OUR company's products.
         
         DATA TO REVIEW: {file_to_teach}
         CONTENT:
-        {files[file_to_teach]['text']}
+        {our_product_files[file_to_teach]['text']}
         
         INSTRUCTIONS:
         1. Write a VERY SHORT, simple, human-readable summary of the company/product (1-2 conversational sentences maximum, like you are explaining it to a friend. NO corporate jargon).
         2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the products and the company.
-        3. List the core Products or Services clearly.
-        4. Provide 2-3 short bullet points of the key Features.
-        5. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
+        3. These are OUR products — present them positively and with pride.
+        4. List the core Products or Services clearly.
+        5. Provide 2-3 short bullet points of the key Features.
+        6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
         """
         
         try:
-            resp = await get_groq_response(teach_prompt, files[file_to_teach]['text'], temperature=0.3)
+            resp = await get_groq_response(teach_prompt, our_product_files[file_to_teach]['text'], temperature=0.3)
             
             metadata["taught_files"].append(file_to_teach)
             metadata = SlidingWindowMemory.add_message(metadata, "Instructor", resp)
