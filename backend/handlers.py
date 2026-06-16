@@ -1364,8 +1364,8 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
     # ========== TRAINING MODULE (PYTHON CONTROLLED) ==========
     if metadata["phase"] == "TRAINING_PHASE":
         
-        # Training order: Our Products FIRST, then Competitors. Skip irrelevant files.
-        training_files = list(our_product_files.keys()) + list(competitor_files.keys())
+        # Training only teaches OUR PRODUCTS — competitors handled in normal chat/tests
+        training_files = list(our_product_files.keys())
         our_files = training_files
 
         # Identify what hasn't been taught yet
@@ -1404,46 +1404,25 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
 
         # If there ARE files left, teach the NEXT file in the list
         file_to_teach = untaught_files[0]
+        file_text = our_product_files[file_to_teach]['text']
         
-        # Determine if this file is OUR product or a COMPETITOR
-        is_our_product = file_to_teach in our_product_files
-        file_data = our_product_files.get(file_to_teach) or competitor_files.get(file_to_teach)
-        file_text = file_data['text'] if file_data else ""
+        loading_msg = await update.message.reply_text(f"📘 *Preparing lesson on {file_to_teach}...*", parse_mode="Markdown")
         
-        if is_our_product:
-            loading_msg = await update.message.reply_text(f"📘 *Preparing lesson on {file_to_teach}...*", parse_mode="Markdown")
-            teach_prompt = f"""
-            You are a friendly Sales Trainer. You are training a salesperson about OUR company's products.
-            
-            DATA TO REVIEW: {file_to_teach}
-            CONTENT:
-            {file_text}
-            
-            INSTRUCTIONS:
-            1. Write a VERY SHORT, simple, human-readable summary of the company/product (1-2 conversational sentences maximum, like you are explaining it to a friend. NO corporate jargon).
-            2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the products and the company.
-            3. These are OUR products — present them positively and with pride.
-            4. List the core Products or Services clearly.
-            5. Provide 2-3 short bullet points of the key Features.
-            6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
-            """
-        else:
-            loading_msg = await update.message.reply_text(f"⚔️ *Preparing competitor analysis: {file_to_teach}...*", parse_mode="Markdown")
-            teach_prompt = f"""
-            You are a friendly Sales Trainer. You are now teaching a salesperson about a COMPETITOR's products so they can handle objections and counter-sell effectively.
-            
-            COMPETITOR DATA: {file_to_teach}
-            CONTENT:
-            {file_text}
-            
-            INSTRUCTIONS:
-            1. Write a VERY SHORT summary of what this competitor offers (1-2 sentences, neutral tone).
-            2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the competitor.
-            3. List their main products/services.
-            4. Provide 2-3 bullet points of their key features.
-            5. Then add a short "How to counter" section — give 1-2 tips on how OUR products are better or how to handle a customer mentioning this competitor.
-            6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
-            """
+        teach_prompt = f"""
+        You are a friendly Sales Trainer. You are training a salesperson about OUR company's products.
+        
+        DATA TO REVIEW: {file_to_teach}
+        CONTENT:
+        {file_text}
+        
+        INSTRUCTIONS:
+        1. Write a VERY SHORT, simple, human-readable summary of the company/product (1-2 conversational sentences maximum, like you are explaining it to a friend. NO corporate jargon).
+        2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the products and the company.
+        3. These are OUR products — present them positively and with pride.
+        4. List the core Products or Services clearly.
+        5. Provide 2-3 short bullet points of the key Features.
+        6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
+        """
         
         try:
             resp = await get_groq_response(teach_prompt, file_text, temperature=0.3)
