@@ -183,18 +183,19 @@ def get_tenant_files(context: ContextTypes.DEFAULT_TYPE):
     # Always force a fresh fetch from DB if we are managing files
     from database import supabase
     try:
-        # Fetch directly from ingested_files
-        files_res = supabase.table("ingested_files").select("filename, category").eq("admin_id", google_id).execute()
+        # Fetch directly from ingested_files (get id too for joining cards)
+        files_res = supabase.table("ingested_files").select("id, filename, category").eq("admin_id", google_id).execute()
         
         ram_files = {} # Start fresh to avoid stale data
         
         if files_res.data:
             for f in files_res.data:
+                file_id = f["id"]
                 fname = f["filename"]
                 category = f["category"]
                 
-                # Fetch JSON Card(s) — a file may have multiple condensed cards
-                cards_res = supabase.table("condensed_knowledge_cards").select("*").eq("file_name", fname).execute()
+                # Fetch JSON Card(s) by file_id (file_name column removed from this table)
+                cards_res = supabase.table("condensed_knowledge_cards").select("*").eq("file_id", file_id).execute()
                 full_text = ""
                 if cards_res.data:
                     import json
@@ -208,6 +209,7 @@ def get_tenant_files(context: ContextTypes.DEFAULT_TYPE):
                 
                 ram_files[fname] = {
                     "filename": fname,
+                    "file_id": file_id,
                     "text": full_text,
                     "category": category
                 }
@@ -611,10 +613,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             file_buffer = None
             
-            # 1. Try to fetch the Condensed Knowledge Card
-            card_res = supabase.table("condensed_knowledge_cards").select("*").eq("file_name", real_filename).execute()
+            # Get file_id from ingested_files by filename
+            file_lookup = supabase.table("ingested_files").select("id").eq("filename", real_filename).eq("admin_id", google_id).execute()
+            lookup_file_id = file_lookup.data[0]["id"] if file_lookup.data else None
             
-            if card_res.data:
+            # 1. Try to fetch the Condensed Knowledge Card by file_id
+            card_res = None
+            if lookup_file_id:
+                card_res = supabase.table("condensed_knowledge_cards").select("*").eq("file_id", lookup_file_id).execute()
+            
+            if card_res and card_res.data:
                 card_record = card_res.data[0]
                 content = None
                 
@@ -623,7 +631,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     if isinstance(value, dict):
                         content = value
                         break
-                    elif key not in ['id', 'file_name', 'admin_id', 'created_at', 'card_id', 'file_id'] and isinstance(value, str) and "{" in value:
+                    elif key not in ['id', 'admin_id', 'created_at', 'card_id', 'file_id'] and isinstance(value, str) and "{" in value:
                         try:
                             content = json.loads(value)
                             break
@@ -634,13 +642,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     content_str = json.dumps(content, indent=2) if isinstance(content, dict) else str(content)
                     file_buffer = io.BytesIO(content_str.encode('utf-8'))
             
-            # 2. If no card exists, fetch the raw File Chunks
-            if not file_buffer:
-                chunks_res = supabase.table("file_chunks").select("content").eq("file_name", real_filename).order("chunk_index").execute()
-                
-                if not chunks_res.data and real_filename.endswith('.md'):
-                    clean_name = real_filename[:-3]
-                    chunks_res = supabase.table("file_chunks").select("content").eq("file_name", clean_name).order("chunk_index").execute()
+            # 2. If no card exists, fetch the raw File Chunks by file_id
+            if not file_buffer and lookup_file_id:
+                chunks_res = supabase.table("file_chunks").select("content").eq("file_id", lookup_file_id).order("chunk_index").execute()
                     
                 if chunks_res.data:
                     content_str = "\n\n---\n\n".join([c.get("content", "") for c in chunks_res.data])

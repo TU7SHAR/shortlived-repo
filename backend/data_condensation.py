@@ -552,7 +552,6 @@ class CondensationDatabaseManager:
                 TblFiles.CREATED_BY: admin_id,
                 TblFiles.UPLOADED_BY_ID: uploaded_by_id,
                 TblFiles.CATEGORY: category,
-                "condensed_data": knowledge_card,
                 "vector_text_count": len(embedding_anchors),
                 "condensation_status": "completed"
             }
@@ -595,7 +594,7 @@ class CondensationDatabaseManager:
                                 "vector": embeddings[i],
                                 "embedding_model": "all-MiniLM-L6-v2",
                                 "source_text": chunk_text,
-                                "embedding_type": "chunk"
+                                "embedding_type": "standard"
                             })
                         
                         for i in range(0, len(embeddings_table_data), 100):
@@ -657,7 +656,6 @@ class CondensationDatabaseManager:
                     for i, anchor in enumerate(embedding_anchors):
                         chunk_record = {
                             "file_id": file_uuid,
-                            "file_name": filename,
                             "chunk_index": i + (len(raw_chunks) if raw_chunks else 0),
                             "content": anchor["embedding_text"],
                             "content_hash": hashlib.sha256(anchor["embedding_text"].encode('utf-8')).hexdigest(),
@@ -716,15 +714,15 @@ class CondensationDatabaseManager:
 
             try:
                 metrics_records = [
-                    {"admin_id": admin_id, "file_name": filename, "metric_type": "compression_ratio", "metric_value": float(metrics.compression_ratio), "measured_at": datetime.now().isoformat()},
-                    {"admin_id": admin_id, "file_name": filename, "metric_type": "processing_time_seconds", "metric_value": float(metrics.processing_time_seconds), "measured_at": datetime.now().isoformat()}
+                    {"admin_id": admin_id, "file_id": file_uuid, "metric_type": "compression_ratio", "metric_value": float(metrics.compression_ratio), "measured_at": datetime.now().isoformat()},
+                    {"admin_id": admin_id, "file_id": file_uuid, "metric_type": "processing_time_seconds", "metric_value": float(metrics.processing_time_seconds), "measured_at": datetime.now().isoformat()}
                 ]
                 supabase.table("condensation_metrics").insert(metrics_records).execute()
             except Exception as e:
                 logger.error(f"Failed to save condensation metrics: {e}")
             
             try:
-                log_record = {"file_id": file_uuid, "file_name": filename, "admin_id": admin_id, "stage": "VALIDATION", "status": "completed", "error_message": "Success", "duration_seconds": metrics.processing_time_seconds, "completed_at": datetime.now().isoformat()}
+                log_record = {"file_id": file_uuid, "admin_id": admin_id, "stage": "VALIDATION", "status": "completed", "error_message": "Success", "duration_seconds": metrics.processing_time_seconds, "completed_at": datetime.now().isoformat()}
                 supabase.table("condensation_logs").insert(log_record).execute()
             except Exception as e:
                 logger.error(f"Failed to save condensation log: {e}")
