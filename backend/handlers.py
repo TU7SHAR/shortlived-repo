@@ -184,7 +184,7 @@ def get_tenant_files(context: ContextTypes.DEFAULT_TYPE):
     from database import supabase
     try:
         # Fetch directly from ingested_files
-        files_res = supabase.table("ingested_files").select("filename, category").eq("created_by", google_id).execute()
+        files_res = supabase.table("ingested_files").select("filename, category").eq("admin_id", google_id).execute()
         
         ram_files = {} # Start fresh to avoid stale data
         
@@ -1132,8 +1132,8 @@ async def handle_onboarding_step(update: Update, context: ContextTypes.DEFAULT_T
             
         google_id = context.user_data.get('google_id') 
         
-        user_record = supabase.table(TblUsers.TABLE).select(TblUsers.TOKEN_USED).eq(TblUsers.ID, t_id).execute()
-        active_token = user_record.data[0].get(TblUsers.TOKEN_USED) if user_record.data else "unknown"
+        user_record = supabase.table(TblUsers.TABLE).select(TblUsers.TOKEN_ID).eq(TblUsers.ID, t_id).execute()
+        active_token_id = user_record.data[0].get(TblUsers.TOKEN_ID) if user_record.data else None
         
         try:
             save_onboarding_lead({
@@ -1145,7 +1145,7 @@ async def handle_onboarding_step(update: Update, context: ContextTypes.DEFAULT_T
                 TblOnboarding.GOAL: metadata.get('goal', 'Unknown'),
                 TblOnboarding.PASSION: text,
                 TblOnboarding.ADMIN_ID: google_id,
-                TblOnboarding.TOKEN_USED: active_token 
+                TblOnboarding.TOKEN_ID: active_token_id 
             })
             
             update_user_state(t_id, mode="use", step=0, metadata={})
@@ -1257,15 +1257,15 @@ async def handle_test_step(update: Update, context: ContextTypes.DEFAULT_TYPE, s
             eval_data["score"] = calculated_score
             # -----------------------------------------------------
 
-            user_record = supabase.table(TblUsers.TABLE).select(TblUsers.TOKEN_USED).eq(TblUsers.ID, t_id).execute()
-            active_token = user_record.data[0].get(TblUsers.TOKEN_USED) if user_record.data else "unknown" 
+            user_record = supabase.table(TblUsers.TABLE).select(TblUsers.TOKEN_ID).eq(TblUsers.ID, t_id).execute()
+            active_token_id = user_record.data[0].get(TblUsers.TOKEN_ID) if user_record.data else None 
             google_id = get_google_id(t_id)
 
             save_test_result({
                 "telegram_id": t_id,
                 "username": update.effective_user.username or update.effective_user.first_name,
                 "admin_id": google_id,
-                "token_used": active_token,
+                "token_id": active_token_id,
                 "category": category,
                 "qa_data": eval_data, 
                 "score": eval_data.get("score", 0),
@@ -1765,7 +1765,7 @@ async def clear_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = str(update.message.from_user.id)
 
     user_record = supabase.table(TblUsers.TABLE) \
-        .select(TblUsers.TOKEN_USED) \
+        .select(TblUsers.TOKEN_ID) \
         .eq(TblUsers.ID, telegram_id) \
         .execute()
 
@@ -1773,12 +1773,12 @@ async def clear_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("You are not currently authenticated.")
         return
 
-    used_token = user_record.data[0].get(TblUsers.TOKEN_USED)
+    token_id = user_record.data[0].get(TblUsers.TOKEN_ID)
 
-    if used_token:
+    if token_id:
         supabase.table(TblTokens.TABLE) \
             .update({TblTokens.IS_REVOKED: True}) \
-            .eq(TblTokens.TOKEN_STRING, used_token) \
+            .eq(TblTokens.ID, token_id) \
             .execute()
 
     supabase.table(TblUsers.TABLE) \
