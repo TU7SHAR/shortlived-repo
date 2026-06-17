@@ -551,11 +551,10 @@ class CondensationDatabaseManager:
                 TblFiles.FILENAME: filename,
                 TblFiles.CREATED_BY: admin_id,
                 TblFiles.UPLOADED_BY_ID: uploaded_by_id,
-                TblFiles.UPLOADED_BY_USER: uploaded_by_username,
                 TblFiles.CATEGORY: category,
                 "condensed_data": knowledge_card,
                 "vector_text_count": len(embedding_anchors),
-                "is_condensed": True
+                "condensation_status": "completed"
             }
             file_response = supabase.table(TblFiles.TABLE).insert(file_record).execute()
             file_uuid = file_response.data[0]["id"] if file_response.data else None
@@ -571,7 +570,6 @@ class CondensationDatabaseManager:
                     for i, chunk_text in enumerate(raw_chunks):
                         chunk_record = {
                             "file_id": file_uuid,
-                            "file_name": filename,
                             "chunk_index": i,
                             "content": chunk_text,
                             "content_hash": hashlib.sha256(chunk_text.encode('utf-8')).hexdigest(),
@@ -610,7 +608,6 @@ class CondensationDatabaseManager:
 
             card_record = {
                 "file_id": file_uuid,
-                "file_name": filename,
                 "admin_id": admin_id,
                 "card_json": knowledge_card,
                 "card_size_bytes": metrics.condensed_size_bytes,
@@ -620,7 +617,6 @@ class CondensationDatabaseManager:
                 "processing_time_seconds": metrics.processing_time_seconds,
                 "extraction_calls": metrics.extraction_calls,
                 "reduction_calls": metrics.reduction_calls,
-                "compression_ratio": metrics.compression_ratio
             }
             card_response = supabase.table("condensed_knowledge_cards").insert(card_record).execute()
             
