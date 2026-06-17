@@ -680,7 +680,7 @@ class CondensationDatabaseManager:
                                 "embedding_model": "all-MiniLM-L6-v2",
                                 "source_text": filename,
                                 "anchor_text": anchor["embedding_text"],
-                                "embedding_type": "anchor",
+                                "embedding_type": "asymmetric",
                                 "is_primary": True
                             })
                             
