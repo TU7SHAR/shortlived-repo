@@ -392,8 +392,7 @@ export default function KnowledgeBaseTable() {
                       </span>
                       <span className="text-grey-300">•</span>
                       <span>
-                        Uploaded by @
-                        {file[DB.FILES.UPLOADED_BY_USER] || "Unknown"}
+                        Uploaded by user #{file[DB.FILES.UPLOADED_BY_ID] || "Unknown"}
                       </span>
                       <span className="text-grey-300">•</span>
                       <span>
