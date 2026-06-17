@@ -13,7 +13,7 @@ import {
 export const inviteTokens = pgTable("invite_tokens", {
   id: uuid("id").defaultRandom().primaryKey(),
   tokenString: text("token_string").notNull().unique(),
-  createdBy: uuid("created_by"),
+  adminId: uuid("admin_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   isUsed: boolean("is_used").default(false),
   usedByTelegramId: bigint("used_by_telegram_id", { mode: "number" }),
@@ -29,7 +29,8 @@ export const authorizedUsers = pgTable("authorized_users", {
     .notNull()
     .unique()
     .primaryKey(),
-  tokenUsed: text("token_used").unique(),
+  tokenId: uuid("token_id"),
+  adminId: uuid("admin_id"),
   activatedAt: timestamp("activated_at", { withTimezone: true }).defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   isBanned: boolean("is_banned").default(false),
@@ -37,7 +38,7 @@ export const authorizedUsers = pgTable("authorized_users", {
 
 export const botSettings = pgTable("bot_settings", {
   id: bigint("id", { mode: "number" }).primaryKey(),
-  createdBy: uuid("created_by").notNull().unique(),
+  adminId: uuid("admin_id").notNull().unique(),
   strictKnowledgeMode: boolean("strict_knowledge_mode").default(true),
   temperature: doublePrecision("temperature").default(0.2),
   maintenanceMode: boolean("maintenance_mode").default(false),
@@ -60,8 +61,8 @@ export const ingestedFiles = pgTable("ingested_files", {
   uploadedByUsername: text("uploaded_by_username"),
   uploadedByTelegramId: bigint("uploaded_by_telegram_id", { mode: "number" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  createdBy: uuid("created_by"),
-  category: text("category").default("General"),
+  adminId: uuid("admin_id").notNull(),
+  category: text("category").notNull(),
 });
 
 export const userStates = pgTable("user_states", {
@@ -83,15 +84,6 @@ export const onboardingLeads = pgTable("onboarding_leads", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   role: text("role"),
   passion: text("passion"),
-});
-
-export const quizScores = pgTable("quiz_scores", {
-  id: bigint("id", { mode: "number" }).primaryKey(),
-  telegramId: bigint("telegram_id", { mode: "number" }),
-  category: text("category"),
-  score: integer("score"),
-  totalQuestions: integer("total_questions"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export const testResults = pgTable("test_results", {

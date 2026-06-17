@@ -337,22 +337,22 @@ def validate_user_access(telegram_id):
             return False, "Access Denied: Your account has been banned."
 
         # 3. Get the token currently linked to this user
-        active_token = user.get(TblUsers.TOKEN_USED)
-        if not active_token:
+        token_id = user.get(TblUsers.TOKEN_ID)
+        if not token_id:
             return False, "No valid invite link found. Please use /start with your token."
 
         # 4. Check the status of that specific token
-        token_res = supabase.table(TblTokens.TABLE).select("*").eq(TblTokens.TOKEN_STRING, active_token).execute()
+        token_res = supabase.table(TblTokens.TABLE).select("*").eq(TblTokens.ID, token_id).execute()
         token_data = token_res.data[0] if token_res.data else None
 
         # 5. Revoke Check
         if token_data and token_data.get(TblTokens.IS_REVOKED):
-            supabase.table(TblUsers.TABLE).update({TblUsers.TOKEN_USED: None}).eq(TblUsers.ID, telegram_id).execute()
+            supabase.table(TblUsers.TABLE).update({TblUsers.TOKEN_ID: None}).eq(TblUsers.ID, telegram_id).execute()
             return False, "Access Denied: Your invite link has been revoked."
 
         # 6. Safety check
         if not token_data:
-            supabase.table(TblUsers.TABLE).update({TblUsers.TOKEN_USED: None}).eq(TblUsers.ID, telegram_id).execute()
+            supabase.table(TblUsers.TABLE).update({TblUsers.TOKEN_ID: None}).eq(TblUsers.ID, telegram_id).execute()
             return False, "Invalid Key: Your current session key is no longer valid."
 
         return True, "Authorized"

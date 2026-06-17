@@ -1767,7 +1767,7 @@ async def clear_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = str(update.message.from_user.id)
 
     user_record = supabase.table(TblUsers.TABLE) \
-        .select(TblUsers.TOKEN_USED) \
+        .select(TblUsers.TOKEN_ID) \
         .eq(TblUsers.ID, telegram_id) \
         .execute()
 
@@ -1775,12 +1775,12 @@ async def clear_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("You are not currently authenticated.")
         return
 
-    used_token = user_record.data[0].get(TblUsers.TOKEN_USED)
+    token_id = user_record.data[0].get(TblUsers.TOKEN_ID)
 
-    if used_token:
+    if token_id:
         supabase.table(TblTokens.TABLE) \
             .update({TblTokens.IS_REVOKED: True}) \
-            .eq(TblTokens.TOKEN_STRING, used_token) \
+            .eq(TblTokens.ID, token_id) \
             .execute()
 
     supabase.table(TblUsers.TABLE) \
