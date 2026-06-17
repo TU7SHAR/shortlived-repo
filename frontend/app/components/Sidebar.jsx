@@ -96,9 +96,9 @@ function useBotStatus() {
 function SidebarHeader({ onClose }) {
   return (
     <div className="h-[68px] flex items-center justify-between px-6 border-b border-grey-100 shrink-0">
-      <Link
+      <a
         href="/"
-        className="flex items-center gap-2.5 text-navy font-display font-bold text-[1.4rem] tracking-tight decoration-transparent"
+        className="flex items-center gap-2.5 text-navy font-display font-bold text-[1.4rem] tracking-tight no-underline"
       >
         <div className="w-[36px] h-[36px] bg-primary rounded-[9px] flex items-center justify-center relative overflow-hidden shrink-0">
           <div className="absolute w-[20px] h-[20px] border-[2.5px] border-white rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-[58%]"></div>
@@ -107,7 +107,7 @@ function SidebarHeader({ onClose }) {
         <span>
           Sales<span className="text-primary-bright">ji</span>
         </span>
-      </Link>
+      </a>
       <button
         onClick={onClose}
         className="md:hidden p-2 text-grey-500 hover:text-primary transition-colors rounded-lg hover:bg-grey-50"

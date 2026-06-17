@@ -78,10 +78,10 @@ export default function KnowledgeBaseTable() {
       (f) => f[DB.FILES.CATEGORY] === "Our Products",
     ).length;
     const competitiveList = files.filter(
-      (f) => f[DB.FILES.CATEGORY] === "Competitive List",
+      (f) => f[DB.FILES.CATEGORY] === "Competitor Products",
     ).length;
     const priceList = files.filter(
-      (f) => f[DB.FILES.CATEGORY] === "Price List",
+      (f) => f[DB.FILES.CATEGORY] === "Price Lists",
     ).length;
 
     return { total, ourProducts, competitiveList, priceList };
@@ -263,7 +263,7 @@ export default function KnowledgeBaseTable() {
       {/* Controls & Filter Panel Row */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center bg-white p-4 rounded-xl border border-grey-100 shadow-sm">
         <div className="flex flex-wrap gap-2">
-          {["All", "Our Products", "Competitive List", "Price List"].map(
+          {["All", "Our Products", "Competitor Products", "Price Lists"].map(
             (category) => (
               <button
                 key={category}
@@ -392,8 +392,7 @@ export default function KnowledgeBaseTable() {
                       </span>
                       <span className="text-grey-300">•</span>
                       <span>
-                        Uploaded by @
-                        {file[DB.FILES.UPLOADED_BY_USER] || "Unknown"}
+                        Uploaded by user #{file[DB.FILES.UPLOADED_BY_ID] || "Unknown"}
                       </span>
                       <span className="text-grey-300">•</span>
                       <span>

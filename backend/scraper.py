@@ -126,7 +126,6 @@ def save_to_vector_db_complete(
             deduped_vectors.append(vector)
             
             record = {
-                "file_name": filename,
                 "content": chunk,
                 "embedding": vector,
                 "chunk_index": valid_chunk_count,
