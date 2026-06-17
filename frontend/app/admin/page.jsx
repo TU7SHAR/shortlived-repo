@@ -215,7 +215,7 @@ export default async function AdminDashboard({ searchParams }) {
                         {user.telegram_id}
                       </td>
                       <td className="py-3 sm:py-4 px-2 text-[11px] sm:text-xs text-zinc-500 font-mono truncate max-w-[120px]">
-                        {user.token_used || "N/A"}
+                        {user.token_id || "N/A"}
                       </td>
                       <td className="py-3 sm:py-4 px-2 text-right">
                         <span

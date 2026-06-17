@@ -118,7 +118,6 @@ export default function ManageUsers() {
       .from(DB.USERS.TABLE)
       .update({
         [DB.USERS.IS_BANNED]: false,
-        [DB.USERS.TOKEN_USED]: null,
       })
       .eq(DB.USERS.ID, telegramId);
 
