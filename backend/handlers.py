@@ -396,6 +396,8 @@ async def handle_crawl(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result = scrape_single_url(url, admin_id=google_id)
         
         if result.get('success'):
+            # THE FIX: We must explicitly pull the chunks and embeddings from the result dictionary
+            # and inject them into the pending_task state so they survive the button click.
             context.user_data['pending_task'] = {
                 "type": "crawl",
                 "data": {

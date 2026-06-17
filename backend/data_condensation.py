@@ -552,6 +552,7 @@ class CondensationDatabaseManager:
                 TblFiles.CREATED_BY: admin_id,
                 TblFiles.UPLOADED_BY_ID: uploaded_by_id,
                 TblFiles.CATEGORY: category,
+                "condensed_data": knowledge_card,
                 "vector_text_count": len(embedding_anchors),
                 "condensation_status": "completed"
             }
@@ -594,7 +595,7 @@ class CondensationDatabaseManager:
                                 "vector": embeddings[i],
                                 "embedding_model": "all-MiniLM-L6-v2",
                                 "source_text": chunk_text,
-                                "embedding_type": "standard"
+                                "embedding_type": "chunk"
                             })
                         
                         for i in range(0, len(embeddings_table_data), 100):
