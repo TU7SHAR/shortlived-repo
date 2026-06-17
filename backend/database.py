@@ -178,7 +178,8 @@ def verify_and_authorize(token_suffix: str, telegram_id: int, telegram_username:
         # UPSERT Authorized User
         supabase.table(TblUsers.TABLE).upsert({
             TblUsers.ID: telegram_id,
-            TblUsers.TOKEN_USED: token_record[TblTokens.TOKEN_STRING],
+            TblUsers.TOKEN_ID: token_record[TblTokens.ID],
+            TblUsers.ADMIN_ID: token_record[TblTokens.ADMIN_ID],
             TblUsers.IS_BANNED: False
         }).execute()
             
@@ -191,14 +192,14 @@ def verify_and_authorize(token_suffix: str, telegram_id: int, telegram_username:
 def get_user_role(telegram_id: int) -> str:
     """Get user role from token"""
     try:
-        user_res = supabase.table(TblUsers.TABLE).select(TblUsers.TOKEN_USED).eq(TblUsers.ID, telegram_id).execute()
+        user_res = supabase.table(TblUsers.TABLE).select(TblUsers.TOKEN_ID).eq(TblUsers.ID, telegram_id).execute()
         
-        if not user_res.data or not user_res.data[0].get(TblUsers.TOKEN_USED):
+        if not user_res.data or not user_res.data[0].get(TblUsers.TOKEN_ID):
             return "normal"
             
-        current_token = user_res.data[0].get(TblUsers.TOKEN_USED)
+        token_id = user_res.data[0].get(TblUsers.TOKEN_ID)
         
-        token_res = supabase.table(TblTokens.TABLE).select(TblTokens.TOKEN_TYPE).eq(TblTokens.TOKEN_STRING, current_token).execute()
+        token_res = supabase.table(TblTokens.TABLE).select(TblTokens.TOKEN_TYPE).eq(TblTokens.ID, token_id).execute()
         
         if token_res.data and token_res.data[0].get(TblTokens.TOKEN_TYPE):
             return token_res.data[0][TblTokens.TOKEN_TYPE].lower()
@@ -209,23 +210,16 @@ def get_user_role(telegram_id: int) -> str:
         return "normal"
 
 def get_google_id(telegram_id: int) -> str:
-    """Get admin Google ID from user token"""
+    """Get admin ID from user's token"""
     try:
-        user_res = supabase.table(TblUsers.TABLE).select(TblUsers.TOKEN_USED).eq(TblUsers.ID, telegram_id).execute()
+        user_res = supabase.table(TblUsers.TABLE).select(TblUsers.ADMIN_ID).eq(TblUsers.ID, telegram_id).execute()
         
-        if not user_res.data or not user_res.data[0].get(TblUsers.TOKEN_USED):
+        if not user_res.data or not user_res.data[0].get(TblUsers.ADMIN_ID):
             return None
             
-        current_token = user_res.data[0].get(TblUsers.TOKEN_USED)
-        
-        res = supabase.table(TblTokens.TABLE).select(TblTokens.CREATED_BY).eq(TblTokens.TOKEN_STRING, current_token).execute()
-        
-        if res.data and res.data[0].get(TblTokens.CREATED_BY):
-            return res.data[0][TblTokens.CREATED_BY]
-            
-        return None
+        return user_res.data[0][TblUsers.ADMIN_ID]
     except Exception as e:
-        logger.error(f"Error fetching Google ID: {e}")
+        logger.error(f"Error fetching admin ID: {e}")
         return None
 
 def log_ingested_file(filename: str, telegram_id: int, username: str, google_id: str, category: str = "Our Products"):
@@ -235,7 +229,7 @@ def log_ingested_file(filename: str, telegram_id: int, username: str, google_id:
             TblFiles.FILENAME: filename,
             TblFiles.UPLOADED_BY_ID: telegram_id,
             TblFiles.UPLOADED_BY_USER: username,
-            TblFiles.CREATED_BY: google_id,
+            TblFiles.ADMIN_ID: google_id,
             TblFiles.CATEGORY: category
         }).execute()
     except Exception as e:
@@ -265,7 +259,7 @@ def remove_ingested_file(filename: str, google_id: str):
         logger.info(f"Deleted {filename} chunks from vector DB")
         
         # 2. Delete from metadata table
-        supabase.table(TblFiles.TABLE).delete().eq(TblFiles.FILENAME, filename).eq(TblFiles.CREATED_BY, google_id).execute()
+        supabase.table(TblFiles.TABLE).delete().eq(TblFiles.FILENAME, filename).eq(TblFiles.ADMIN_ID, google_id).execute()
         logger.info(f"Successfully deleted {filename} from file metadata")
         
         return True
@@ -343,22 +337,22 @@ def validate_user_access(telegram_id):
             return False, "Access Denied: Your account has been banned."
 
         # 3. Get the token currently linked to this user
-        active_token = user.get(TblUsers.TOKEN_USED)
-        if not active_token:
+        token_id = user.get(TblUsers.TOKEN_ID)
+        if not token_id:
             return False, "No valid invite link found. Please use /start with your token."
 
         # 4. Check the status of that specific token
-        token_res = supabase.table(TblTokens.TABLE).select("*").eq(TblTokens.TOKEN_STRING, active_token).execute()
+        token_res = supabase.table(TblTokens.TABLE).select("*").eq(TblTokens.ID, token_id).execute()
         token_data = token_res.data[0] if token_res.data else None
 
         # 5. Revoke Check
         if token_data and token_data.get(TblTokens.IS_REVOKED):
-            supabase.table(TblUsers.TABLE).update({TblUsers.TOKEN_USED: None}).eq(TblUsers.ID, telegram_id).execute()
+            supabase.table(TblUsers.TABLE).update({TblUsers.TOKEN_ID: None}).eq(TblUsers.ID, telegram_id).execute()
             return False, "Access Denied: Your invite link has been revoked."
 
         # 6. Safety check
         if not token_data:
-            supabase.table(TblUsers.TABLE).update({TblUsers.TOKEN_USED: None}).eq(TblUsers.ID, telegram_id).execute()
+            supabase.table(TblUsers.TABLE).update({TblUsers.TOKEN_ID: None}).eq(TblUsers.ID, telegram_id).execute()
             return False, "Invalid Key: Your current session key is no longer valid."
 
         return True, "Authorized"

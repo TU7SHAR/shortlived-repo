@@ -2,7 +2,8 @@ class TblTokens:
     TABLE = "invite_tokens"
     ID = "id"
     TOKEN_STRING = "token_string"
-    CREATED_BY = "created_by"
+    ADMIN_ID = "admin_id"
+    CREATED_BY = "admin_id"  # backward compat alias
     CREATED_AT = "created_at"
     IS_USED = "is_used"
     USED_BY_ID = "used_by_telegram_id"
@@ -15,7 +16,8 @@ class TblTokens:
 class TblUsers:
     TABLE = "authorized_users"
     ID = "telegram_id"
-    TOKEN_USED = "token_used"
+    TOKEN_ID = "token_id"
+    ADMIN_ID = "admin_id"
     ACTIVATED_AT = "activated_at"
     CREATED_AT = "created_at"
     IS_BANNED = "is_banned"
@@ -23,7 +25,8 @@ class TblUsers:
 class TblBotSettings:
     TABLE = "bot_settings"
     ID = "id"
-    CREATED_BY = "created_by"
+    ADMIN_ID = "admin_id"
+    CREATED_BY = "admin_id"  # backward compat alias
     STRICT_MODE = "strict_knowledge_mode"
     TEMPERATURE = "temperature"
     MAINTENANCE_MODE = "maintenance_mode"
@@ -47,9 +50,9 @@ class TblFiles:
     UPLOADED_BY_USER = "uploaded_by_username"
     UPLOADED_BY_ID = "uploaded_by_telegram_id"
     CREATED_AT = "created_at"
-    CREATED_BY = "created_by"
+    ADMIN_ID = "admin_id"
+    CREATED_BY = "admin_id"  # backward compat alias
     CATEGORY = "category"
-    CONDENSED_DATA = "condensed_data"
     VECTOR_TEXT_COUNT = "vector_text_count"
     IS_CONDENSED = "is_condensed"
     CONDENSATION_STATUS = "condensation_status"
@@ -80,24 +83,15 @@ class TblOnboarding:
     CREATED_AT = "created_at"
     ROLE = "role"
     PASSION = "passion"
-    TOKEN_USED = "token_used"
+    TOKEN_ID = "token_id"
     ADMIN_ID = "admin_id" 
     TRAINING_STATUS = "training_status"
-
-class TblQuiz:
-    TABLE = "quiz_scores"
-    ID = "id"
-    TELEGRAM_ID = "telegram_id"
-    CATEGORY = "category"
-    SCORE = "score"
-    TOTAL_QUESTIONS = "total_questions"
-    CREATED_AT = "created_at"
 
 class TblTests:
     TABLE = "test_results"
     ID = "id"
     TELEGRAM_ID = "telegram_id"
-    TOKEN_USED = "token_used"
+    TOKEN_ID = "token_id"
     CATEGORY = "category"
     QA_DATA = "qa_data"
     SCORE = "score"
