@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { siteConfig } from "./utils/config";
+import { supabase } from "./lib/supabase";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -16,6 +17,25 @@ export default function HomePage() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // Check if user is logged in via Supabase
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setIsLoggedIn(!!user);
+      setAuthChecked(true);
+    };
+    checkAuth();
+
+    // Listen for auth state changes (login/logout in another tab, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session);
+      setAuthChecked(true);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -141,27 +161,29 @@ export default function HomePage() {
           </ul>
 
           <div className="hidden md:flex items-center gap-3">
-            {isLoggedIn ? (
+            {!authChecked ? null : isLoggedIn ? (
               <Link
                 href="/dashboard"
-                className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
+                className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2.5 rounded-[9px] shadow-[0_2px_8px_rgba(29,78,216,0.25)] hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)] hover:-translate-y-[1px] transition-all flex items-center gap-1.5"
               >
-                Dashboard
+                Dashboard &rarr;
               </Link>
             ) : (
-              <Link
-                href="/login"
-                className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
-              >
-                Login
-              </Link>
+              <>
+                <Link
+                  href="/login"
+                  className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg transition-colors"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/contact"
+                  className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2.5 rounded-[9px] shadow-[0_2px_8px_rgba(29,78,216,0.25)] hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)] hover:-translate-y-[1px] transition-all flex items-center gap-1.5"
+                >
+                  Book a Demo &rarr;
+                </Link>
+              </>
             )}
-            <Link
-              href="/contact"
-              className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2.5 rounded-[9px] shadow-[0_2px_8px_rgba(29,78,216,0.25)] hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)] hover:-translate-y-[1px] transition-all flex items-center gap-1.5"
-            >
-              Book a Demo &rarr;
-            </Link>
           </div>
 
           <button
@@ -213,27 +235,29 @@ export default function HomePage() {
             Contact
           </Link>
           <div className="mt-4 flex flex-col gap-3">
-            {isLoggedIn ? (
+            {!authChecked ? null : isLoggedIn ? (
               <Link
                 href="/dashboard"
-                className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
+                className="text-center font-semibold p-4 bg-blue-700 text-white rounded-xl"
               >
-                Dashboard
+                Dashboard &rarr;
               </Link>
             ) : (
-              <Link
-                href="/login"
-                className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
-              >
-                Login
-              </Link>
+              <>
+                <Link
+                  href="/login"
+                  className="text-center font-semibold p-4 border border-slate-200 rounded-xl"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/contact"
+                  className="text-center font-semibold p-4 bg-blue-700 text-white rounded-xl"
+                >
+                  Book a Demo &rarr;
+                </Link>
+              </>
             )}
-            <Link
-              href="/contact"
-              className="text-center font-semibold p-4 bg-blue-700 text-white rounded-xl"
-            >
-              Book a Demo &rarr;
-            </Link>
           </div>
         </div>
       )}

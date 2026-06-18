@@ -8,7 +8,7 @@ export async function ensureAdminToken(userId) {
   try {
     const existing = await db.query.inviteTokens.findFirst({
       where: and(
-        eq(inviteTokens.createdBy, userId),
+        eq(inviteTokens.adminId, userId),
         eq(inviteTokens.tokenType, "admin"),
       ),
     });
@@ -22,7 +22,7 @@ export async function ensureAdminToken(userId) {
 
     await db.insert(inviteTokens).values({
       tokenString: link,
-      createdBy: userId,
+      adminId: userId,
       tokenType: "admin",
     });
   } catch (err) {
@@ -33,8 +33,8 @@ export async function ensureAdminToken(userId) {
 export async function getAllTokens(userId) {
   const { data, error } = await supabase
     .from("invite_tokens")
-    .select("*") // Change this line to '*' so it grabs the new is_revoked column
-    .eq("created_by", userId)
+    .select("*")
+    .eq("admin_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) {

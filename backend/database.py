@@ -175,11 +175,12 @@ def verify_and_authorize(token_suffix: str, telegram_id: int, telegram_username:
             TblTokens.USED_BY_USER: telegram_username
         }).eq(TblTokens.ID, token_record[TblTokens.ID]).execute()
 
-        # UPSERT Authorized User
+        # UPSERT Authorized User (with username snapshot)
         supabase.table(TblUsers.TABLE).upsert({
             TblUsers.ID: telegram_id,
             TblUsers.TOKEN_ID: token_record[TblTokens.ID],
             TblUsers.ADMIN_ID: token_record[TblTokens.ADMIN_ID],
+            TblUsers.USERNAME: telegram_username,
             TblUsers.IS_BANNED: False
         }).execute()
             
@@ -228,7 +229,6 @@ def log_ingested_file(filename: str, telegram_id: int, username: str, google_id:
         supabase.table(TblFiles.TABLE).insert({
             TblFiles.FILENAME: filename,
             TblFiles.UPLOADED_BY_ID: telegram_id,
-            TblFiles.UPLOADED_BY_USER: username,
             TblFiles.ADMIN_ID: google_id,
             TblFiles.CATEGORY: category
         }).execute()
@@ -254,12 +254,19 @@ def clear_user_auth(telegram_id: int) -> bool:
 def remove_ingested_file(filename: str, google_id: str):
     """Delete file and vector chunks from database"""
     try:
-        # 1. Delete text chunks from vector DB
-        supabase.table("file_chunks").delete().eq("file_name", filename).execute()
-        logger.info(f"Deleted {filename} chunks from vector DB")
+        # 1. Get the file_id first
+        file_res = supabase.table(TblFiles.TABLE).select(TblFiles.ID).eq(TblFiles.FILENAME, filename).eq(TblFiles.ADMIN_ID, google_id).execute()
+        if not file_res.data:
+            logger.warning(f"File {filename} not found for deletion")
+            return False
+        file_id = file_res.data[0][TblFiles.ID]
+
+        # 2. Delete text chunks by file_id (file_name column removed from file_chunks)
+        supabase.table("file_chunks").delete().eq("file_id", file_id).execute()
+        logger.info(f"Deleted chunks for file_id {file_id}")
         
-        # 2. Delete from metadata table
-        supabase.table(TblFiles.TABLE).delete().eq(TblFiles.FILENAME, filename).eq(TblFiles.ADMIN_ID, google_id).execute()
+        # 3. Delete from metadata table (CASCADE handles cards, embeddings, etc.)
+        supabase.table(TblFiles.TABLE).delete().eq(TblFiles.ID, file_id).execute()
         logger.info(f"Successfully deleted {filename} from file metadata")
         
         return True
@@ -290,7 +297,6 @@ def log_chat_interaction(telegram_id, username, query, response, admin_id, mode=
     try:
         supabase.table(TblChat.TABLE).insert({
             TblChat.TELEGRAM_ID: telegram_id,
-            TblChat.USERNAME: username,
             TblChat.USER_QUERY: query,
             TblChat.BOT_RESPONSE: response,
             TblChat.ADMIN_ID: admin_id,
@@ -366,7 +372,6 @@ def save_feedback(telegram_id: int, username: str, feedback_text: str, admin_id:
     try:
         data = {
             "telegram_id": telegram_id,
-            "username": username,
             "feedback": feedback_text,
             "admin_id": admin_id
         }
