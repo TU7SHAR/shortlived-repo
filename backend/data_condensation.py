@@ -580,28 +580,44 @@ class CondensationDatabaseManager:
                         raw_chunks_data.append(chunk_record) # <--- ADD THIS LINE!
                     
                     if raw_chunks_data:
-                        # Upload in safe batches
+                        # Upload in safe batches and collect inserted IDs
                         batch_size = 100
+                        inserted_chunk_ids = []
                         for i in range(0, len(raw_chunks_data), batch_size):
                             batch = raw_chunks_data[i:i+batch_size]
-                            supabase.table("file_chunks").insert(batch).execute()
+                            res = supabase.table("file_chunks").insert(batch).select("id").execute()
+                            if res.data:
+                                inserted_chunk_ids.extend([row["id"] for row in res.data])
                     try:
                         logger.info(f"Populating dedicated 'embeddings' table with {len(raw_chunks)} chunk vectors...")
                         embeddings_table_data = []
                         for i, chunk_text in enumerate(raw_chunks):
-                            embeddings_table_data.append({
+                            record = {
                                 "admin_id": admin_id,
                                 "vector": embeddings[i],
                                 "embedding_model": "all-MiniLM-L6-v2",
                                 "source_text": chunk_text,
                                 "embedding_type": "standard"
-                            })
+                            }
+                            # Link chunk_id if we have it
+                            if i < len(inserted_chunk_ids):
+                                record["chunk_id"] = inserted_chunk_ids[i]
+                            embeddings_table_data.append(record)
                         
                         for i in range(0, len(embeddings_table_data), 100):
                             batch = embeddings_table_data[i:i+100]
                             supabase.table("embeddings").insert(batch).execute()
                     except Exception as e:
                         logger.error(f"Failed to populate dedicated embeddings table for chunks: {e}")
+                    
+                    # Update ingested_files with chunk count
+                    try:
+                        supabase.table("ingested_files").update({
+                            "vector_chunk_count": len(raw_chunks_data)
+                        }).eq("id", file_uuid).execute()
+                    except Exception as e:
+                        logger.error(f"Failed to update vector_chunk_count: {e}")
+                        
                 except Exception as e:
                     logger.error(f"Failed to insert raw chunks: {e}")
 
@@ -668,13 +684,18 @@ class CondensationDatabaseManager:
                     
                     if chunks_data:
                         supabase.table("file_chunks").insert(chunks_data).execute()
+                        # Get inserted anchor chunk IDs
+                        anchor_chunks_res = supabase.table("file_chunks").select("id").eq("file_id", file_uuid).gt("chunk_index", (len(raw_chunks) if raw_chunks else 0) - 1).order("chunk_index").execute()
+                        inserted_anchor_chunk_ids = [row["id"] for row in anchor_chunks_res.data] if anchor_chunks_res.data else []
                         logger.info("Successfully saved asymmetric anchors to file_chunks.")
+                    else:
+                        inserted_anchor_chunk_ids = []
                     # ---> NEW: POPULATE DEDICATED EMBEDDINGS TABLE FOR ANCHORS <---
                     try:
                         logger.info(f"Populating dedicated 'embeddings' table with {len(embedding_anchors)} anchor vectors...")
                         anchor_embeddings_table_data = []
                         for i, anchor in enumerate(embedding_anchors):
-                            anchor_embeddings_table_data.append({
+                            record = {
                                 "admin_id": admin_id,
                                 "vector": anchor_embeddings[i],
                                 "embedding_model": "all-MiniLM-L6-v2",
@@ -682,7 +703,11 @@ class CondensationDatabaseManager:
                                 "anchor_text": anchor["embedding_text"],
                                 "embedding_type": "asymmetric",
                                 "is_primary": True
-                            })
+                            }
+                            # Link chunk_id if we have it
+                            if i < len(inserted_anchor_chunk_ids):
+                                record["chunk_id"] = inserted_anchor_chunk_ids[i]
+                            anchor_embeddings_table_data.append(record)
                             
                         for i in range(0, len(anchor_embeddings_table_data), 100):
                             batch = anchor_embeddings_table_data[i:i+100]
@@ -722,10 +747,28 @@ class CondensationDatabaseManager:
                 logger.error(f"Failed to save condensation metrics: {e}")
             
             try:
-                log_record = {"file_id": file_uuid, "admin_id": admin_id, "stage": "VALIDATION", "status": "completed", "error_message": "Success", "duration_seconds": metrics.processing_time_seconds, "completed_at": datetime.now().isoformat()}
+                log_record = {
+                    "file_id": file_uuid,
+                    "admin_id": admin_id,
+                    "stage": "VALIDATION",
+                    "status": "completed",
+                    "duration_seconds": metrics.processing_time_seconds,
+                    "tokens_used": metrics.extraction_calls * 4000,  # estimate ~4000 tokens per extraction call
+                    "error_message": "Success",
+                    "started_at": datetime.now().isoformat(),
+                    "completed_at": datetime.now().isoformat()
+                }
                 supabase.table("condensation_logs").insert(log_record).execute()
             except Exception as e:
                 logger.error(f"Failed to save condensation log: {e}")
+            
+            # Update ingested_files with completion timestamp
+            try:
+                supabase.table("ingested_files").update({
+                    "condensation_completed_at": datetime.now().isoformat()
+                }).eq("id", file_uuid).execute()
+            except Exception as e:
+                logger.error(f"Failed to update condensation_completed_at: {e}")
             
             return True
             
