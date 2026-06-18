@@ -683,7 +683,9 @@ class CondensationDatabaseManager:
                         chunks_data.append(chunk_record) # <--- ADD THIS LINE!
                     
                     if chunks_data:
-                        anchor_chunks_res = supabase.table("file_chunks").insert(chunks_data).select("id").execute()
+                        supabase.table("file_chunks").insert(chunks_data).execute()
+                        # Get inserted anchor chunk IDs
+                        anchor_chunks_res = supabase.table("file_chunks").select("id").eq("file_id", file_uuid).gt("chunk_index", (len(raw_chunks) if raw_chunks else 0) - 1).order("chunk_index").execute()
                         inserted_anchor_chunk_ids = [row["id"] for row in anchor_chunks_res.data] if anchor_chunks_res.data else []
                         logger.info("Successfully saved asymmetric anchors to file_chunks.")
                     else:
