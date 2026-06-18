@@ -42,6 +42,13 @@ async def get_groq_response(user_message: str, context: str, temperature: float 
         response = await chain.ainvoke({"context": context, "question": user_message})
         final_answer = re.sub(r'<think>.*?</think>', '', response.content, flags=re.DOTALL).strip()
         
+        # Strip markdown formatting — model ignores prompt instructions about this
+        final_answer = re.sub(r'^#{1,6}\s*', '', final_answer, flags=re.MULTILINE)  # Remove ## headers
+        final_answer = re.sub(r'\*\*(.+?)\*\*', r'\1', final_answer)  # Remove **bold**
+        final_answer = re.sub(r'\*(.+?)\*', r'\1', final_answer)  # Remove *italic*
+        final_answer = re.sub(r'`(.+?)`', r'\1', final_answer)  # Remove `code`
+        final_answer = re.sub(r'^[-*]\s', '• ', final_answer, flags=re.MULTILINE)  # Replace - or * bullets with •
+        
         logger.info(f"GROQ API 200 -> Success. Response length: {len(final_answer)} chars")
         return final_answer
         
