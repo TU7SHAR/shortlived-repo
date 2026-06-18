@@ -1364,126 +1364,114 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
         knowledge_base += "\n=== COMPETITOR DATA (REFERENCE ONLY — NEVER PITCH THESE) ==="
         knowledge_base += "".join([f"\n--- COMPETITOR: {name} ---\n{data['text']}" for name, data in competitor_files.items()])
 
-    # ========== TRAINING MODULE (PYTHON CONTROLLED) ==========
+    # ========== TRAINING MODULE (2 COMBINED LESSONS) ==========
     if metadata["phase"] == "TRAINING_PHASE":
         
-        # Training order: Our Products FIRST, then Competitors. Skip irrelevant files.
-        training_files = list(our_product_files.keys()) + list(competitor_files.keys())
-        our_files = training_files
-
-        # Identify what hasn't been taught yet
-        untaught_files = [f for f in our_files if f not in metadata["taught_files"]]
+        # Training has 2 steps: step 1 = Our Products, step 2 = Competitors
+        current_lesson = metadata.get("current_lesson", 0)
 
         # Check for acknowledgment
-        acknowledgment_keywords = ["ok", "understood", "ready", "got it", "yes", "yeah", "sure", "alright", "next"]
+        acknowledgment_keywords = ["ok", "understood", "ready", "got it", "yes", "yeah", "sure", "alright", "next", "okay"]
         user_acknowledged = any(kw in text.lower().strip() for kw in acknowledgment_keywords)
 
-        # If they haven't acknowledged and ask a question during the lecture
-        if len(metadata["taught_files"]) > 0 and not user_acknowledged and len(text.split()) > 3:
-            loading_msg = await update.message.reply_text(" *Answering your question...*", parse_mode="Markdown")
-            
-            # Build rich context: condensed cards + vector search (raw chunks + asymmetric anchors)
+        # If they ask a question mid-training
+        if current_lesson > 0 and not user_acknowledged and len(text.split()) > 3:
+            loading_msg = await update.message.reply_text("Answering your question...")
             qa_context = knowledge_base
             if google_id:
                 query_vector = get_embedding(text)
                 if query_vector:
                     matches = search_knowledge_base(query_vector, threshold=0.3, limit=5)
                     if matches:
-                        qa_context += "\n\n=== ADDITIONAL RELEVANT DATA FROM VECTOR SEARCH ==="
+                        qa_context += "\n\n=== VECTOR SEARCH RESULTS ==="
                         for match in matches:
-                            qa_context += f"\n[Source: {match['file_name']}] {match['content']}"
-            
-            qa_prompt = f"You are a Sales Instructor. Answer the trainee's question using the knowledge base below. If the answer exists in the data, provide it clearly.\n\nKB: {qa_context}\nQuestion: {text}"
+                            qa_context += f"\n[Source: {match.get('file_name', 'kb')}] {match['content']}"
             try:
-                resp = await get_groq_response(qa_prompt, qa_context, temperature=0.3)
+                resp = await get_groq_response(f"Answer briefly:\n{qa_context}\nQuestion: {text}", qa_context, temperature=0.3)
                 metadata = SlidingWindowMemory.add_message(metadata, "Instructor", resp)
                 update_user_state(t_id, mode="training", step=step+1, metadata=metadata)
-                await loading_msg.edit_text(resp + "\n\n*(Type 'ok' to continue the lesson)*")
+                await loading_msg.edit_text(resp + "\n\n(Type 'ok' to continue)")
                 return
             except Exception:
-                await loading_msg.edit_text("Error answering. Type 'ok' to skip.")
+                await loading_msg.edit_text("Error. Type 'ok' to skip.")
                 return
 
-        # If NO files left to teach, training is COMPLETE
-        if not untaught_files:
+        # LESSON 1: ALL OUR PRODUCTS
+        if current_lesson == 0:
+            if not our_product_files:
+                metadata["current_lesson"] = 1
+            else:
+                our_text = "\n".join([d['text'] for d in our_product_files.values() if d.get('text')])
+                loading_msg = await update.message.reply_text("Preparing your product briefing...")
+                teach_prompt = f"""You are a Sales Trainer. Give ONE comprehensive briefing about ALL our products.
+
+DATA:
+{our_text}
+
+RULES:
+1. 2-3 sentence overview of who we are.
+2. List ALL key models/products (one line each with standout feature).
+3. End with 3-4 KEY SELLING POINTS the salesperson should memorize.
+4. Keep it punchy. No corporate jargon. Plain text only, NO markdown.
+5. End with: "Got it? Type 'ok' and I'll brief you on the competition." """
+                try:
+                    resp = await get_groq_response(teach_prompt, our_text, temperature=0.3)
+                    metadata["current_lesson"] = 1
+                    metadata = SlidingWindowMemory.add_message(metadata, "Instructor", resp)
+                    update_user_state(t_id, mode="training", step=step+1, metadata=metadata)
+                    await loading_msg.edit_text(resp)
+                    if google_id:
+                        log_chat_interaction(t_id, username, text, resp, google_id, mode="training")
+                except Exception:
+                    await loading_msg.edit_text("Error. Type 'ok' to retry.")
+                return
+
+        # LESSON 2: ALL COMPETITORS
+        if current_lesson == 1:
+            if not competitor_files:
+                metadata["current_lesson"] = 2
+            else:
+                comp_text = "\n".join([d['text'] for d in competitor_files.values() if d.get('text')])
+                our_text = "\n".join([d['text'] for d in our_product_files.values() if d.get('text')])
+                loading_msg = await update.message.reply_text("Preparing competitor intelligence...")
+                teach_prompt = f"""You are a Sales Trainer teaching how to CRUSH competitors.
+
+OUR PRODUCTS:
+{our_text[:8000]}
+
+COMPETITORS:
+{comp_text}
+
+RULES:
+1. List each competitor (1 line — what they sell).
+2. For each: 1-2 WEAKNESSES where WE are better.
+3. Give 3-4 COUNTER SCRIPTS: "If customer says [X], you say: [Y]"
+4. Be aggressive for OUR products. This is a sales war room.
+5. Plain text only, NO markdown. End with: "You're armed. Type 'ok' to finish." """
+                try:
+                    resp = await get_groq_response(teach_prompt, comp_text, temperature=0.3)
+                    metadata["current_lesson"] = 2
+                    metadata = SlidingWindowMemory.add_message(metadata, "Instructor", resp)
+                    update_user_state(t_id, mode="training", step=step+1, metadata=metadata)
+                    await loading_msg.edit_text(resp)
+                    if google_id:
+                        log_chat_interaction(t_id, username, text, resp, google_id, mode="training")
+                except Exception:
+                    await loading_msg.edit_text("Error. Type 'ok' to retry.")
+                return
+
+        # DONE
+        if current_lesson >= 2:
             update_user_state(t_id, mode="use", step=0, metadata={})
-            
             try:
-                supabase.table("onboarding_leads") \
-                    .update({"training_status": "completed"}) \
-                    .eq("telegram_id", t_id) \
-                    .execute()
-            except Exception as e:
-                logger.error(f"Failed to update training status to completed: {e}")
-            
-            completion_msg = (
-                "🎓 **Training Complete!**\n\n"
-                "You've been briefed on all our products. You're now ready to use the assistant or take the test.\n\n"
-                "Type /menu to continue."
-            )
-            await update.message.reply_text(completion_msg, parse_mode="Markdown")
+                supabase.table("onboarding_leads").update({"training_status": "completed"}).eq("telegram_id", t_id).execute()
+            except Exception:
+                pass
+            await update.message.reply_text("TRAINING COMPLETE!\n\nYou know our products AND how to counter every competitor.\nGo close deals. Type /menu to continue.")
             if google_id:
                 log_chat_interaction(t_id, username, text, "TRAINING COMPLETE", google_id, mode="training")
             return
-            await update.message.reply_text(transition_msg, parse_mode="Markdown")
-            return
 
-        # If there ARE files left, teach the NEXT file in the list
-        file_to_teach = untaught_files[0]
-        
-        # Determine if this is OUR product or a COMPETITOR
-        is_our_product = file_to_teach in our_product_files
-        file_data = our_product_files.get(file_to_teach) or competitor_files.get(file_to_teach)
-        file_text = file_data['text'] if file_data else ""
-        
-        if is_our_product:
-            loading_msg = await update.message.reply_text(f"📘 *Preparing lesson on {file_to_teach}...*", parse_mode="Markdown")
-            teach_prompt = f"""
-            You are a friendly Sales Trainer. You are training a salesperson about OUR company's products.
-            
-            DATA TO REVIEW: {file_to_teach}
-            CONTENT:
-            {file_text}
-            
-            INSTRUCTIONS:
-            1. Write a VERY SHORT, simple, human-readable summary of the company/product (1-2 conversational sentences maximum, like you are explaining it to a friend. NO corporate jargon).
-            2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the products and the company.
-            3. These are OUR products — present them positively and with pride.
-            4. List the core Products or Services clearly.
-            5. Provide 2-3 short bullet points of the key Features.
-            6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
-            """
-        else:
-            loading_msg = await update.message.reply_text(f"⚔️ *Know your competition: {file_to_teach}...*", parse_mode="Markdown")
-            teach_prompt = f"""
-            You are a friendly Sales Trainer. You are now teaching a salesperson about a COMPETITOR so they know what they're up against in the market.
-            
-            COMPETITOR DATA: {file_to_teach}
-            CONTENT:
-            {file_text}
-            
-            INSTRUCTIONS:
-            1. Write a VERY SHORT summary of what this competitor offers (1-2 sentences, neutral tone).
-            2. CRITICAL RULE: DO NOT say "This file is about..." or "This document contains...". Talk directly about the competitor.
-            3. List their main products/services.
-            4. Provide 2-3 bullet points of their key strengths.
-            5. Then add a "How to counter" section — give 1-2 actionable tips on how to handle a customer who mentions this competitor.
-            6. End your message EXACTLY with: "Does that make sense? Type 'ok' to proceed."
-            """
-        
-        try:
-            resp = await get_groq_response(teach_prompt, file_text, temperature=0.3)
-            
-            metadata["taught_files"].append(file_to_teach)
-            metadata = SlidingWindowMemory.add_message(metadata, "Instructor", resp)
-            update_user_state(t_id, mode="training", step=step+1, metadata=metadata)
-            
-            await loading_msg.edit_text(resp)
-            if google_id:
-                log_chat_interaction(t_id, username, text, resp, google_id, mode="training")
-        except Exception as e:
-            await loading_msg.edit_text("Error generating lesson. Please type 'ok' to retry.")
-        return
     
 @require_auth
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1586,8 +1574,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "Your absolute objective is to arm our sales team with devastatingly effective knowledge, word-for-word scripts, and tactical advantages to ruthlessly close deals, overcome any objection, and completely dominate the competition. You do not just provide information; you provide STRATEGY.\n\n"
         
         "--- 1. IRONCLAD FORMATTING RULES (FAILURE IS STRICTLY PROHIBITED) ---\n"
-        "A) YOU MUST OUTPUT PLAIN TEXT ONLY. You are explicitly banned from using Markdown of any kind.\n"
-        "B) NEVER use asterisks, hash symbols, bolding, or italics. If you must emphasize a word or section header, USE ALL CAPITAL LETTERS.\n"
+        "A) YOU MUST OUTPUT PLAIN TEXT ONLY. You are ABSOLUTELY BANNED from using Markdown of any kind.\n"
+        "B) NEVER EVER use # ## ### * ** ``` or any markdown symbols. NOT A SINGLE ONE.\n"
+        "C) If you must emphasize a word or section header, USE ALL CAPITAL LETTERS instead.\n"
+        "D) DO NOT use bullet points with dashes or asterisks. Use numbers like 1), 2), 3) or letters A), B), C).\n"
+        "E) Keep sentences punchy, short, and formatted for a salesperson reading on a mobile phone mid-call.\n"
+        "F) Your response must look like a normal human text message — NOT like a formatted document.\n\n"
         "C) DO NOT use bullet points or dashes for lists. Use natural paragraph spacing or numbers like 1), 2), 3) or A), B), C) to separate ideas.\n"
         "D) Keep sentences punchy, highly readable, and formatted for a salesperson reading quickly on a mobile device or mid-call.\n\n"
         
