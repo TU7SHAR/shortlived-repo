@@ -15,6 +15,21 @@ export default async function ChatAnalyticsPage({ searchParams }) {
     .order("created_at", { ascending: false })
     .range(from, to);
 
+  // Fetch display names from onboarding_leads for the telegram_ids on this page
+  const telegramIds = [...new Set((chats || []).map(c => c.telegram_id).filter(Boolean))];
+  let nameMap = {};
+  if (telegramIds.length > 0) {
+    const { data: leads } = await supabaseAdmin
+      .from("onboarding_leads")
+      .select("telegram_id, full_name")
+      .in("telegram_id", telegramIds);
+    if (leads) {
+      leads.forEach((lead) => {
+        if (lead.full_name) nameMap[lead.telegram_id] = lead.full_name;
+      });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -38,7 +53,7 @@ export default async function ChatAnalyticsPage({ searchParams }) {
               <tr key={chat.id} className="hover:bg-zinc-50 transition-colors">
                 <td className="px-4 py-3 align-top">
                   <div className="font-bold text-zinc-900">
-                    @{chat.username || "Unknown"}
+                    {nameMap[chat.telegram_id] || `User #${chat.telegram_id}`}
                   </div>
                   <div className="text-zinc-400 font-mono text-[10px]">
                     ID: {chat.telegram_id}

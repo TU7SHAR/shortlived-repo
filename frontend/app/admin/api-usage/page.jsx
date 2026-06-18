@@ -14,10 +14,22 @@ export default async function ApiUsagePage() {
   // 1. Fetch raw interaction logs
   const { data: interactions, error } = await supabaseAdmin
     .from("chat_analytics")
-    .select("telegram_id, username, created_at")
+    .select("telegram_id, created_at")
     .order("created_at", { ascending: false });
 
   if (error) console.error("Analytics Fetch Error:", error.message);
+
+  // Fetch display names from onboarding_leads
+  const { data: leads } = await supabaseAdmin
+    .from("onboarding_leads")
+    .select("telegram_id, full_name");
+
+  const nameMap = {};
+  if (leads) {
+    leads.forEach((lead) => {
+      if (lead.full_name) nameMap[lead.telegram_id] = lead.full_name;
+    });
+  }
 
   // 2. The Aggregation Engine
   const totalRequests = interactions?.length || 0;
@@ -28,7 +40,7 @@ export default async function ApiUsagePage() {
     if (!userStats[key]) {
       userStats[key] = {
         id: key,
-        username: item.username || "anonymous",
+        username: nameMap[key] || `User #${key}`,
         count: 0,
       };
     }

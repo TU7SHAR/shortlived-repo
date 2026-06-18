@@ -37,7 +37,6 @@ export const DB = {
     TABLE: "chat_analytics",
     ID: "id",
     TELEGRAM_ID: "telegram_id",
-    USERNAME: "username",
     USER_QUERY: "user_query",
     BOT_RESPONSE: "bot_response",
     ADMIN_ID: "admin_id",
@@ -100,7 +99,6 @@ export const DB = {
     CREATED_AT: "created_at",
     TOKEN_ID: "token_id",
     ADMIN_ID: "admin_id",
-    USERNAME: "username",
   },
   FEEDBACK: {
     TABLE: "user_feedback",

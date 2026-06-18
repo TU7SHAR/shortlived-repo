@@ -142,8 +142,7 @@ export default function TrainingDetail() {
                   <div className="max-w-[70%] flex flex-col items-start">
                     <div className="bg-white border border-zinc-200 text-zinc-800 px-4 py-3 rounded-2xl rounded-tl-sm shadow-2xs">
                       <div className="flex items-center gap-1.5 mb-1 text-[10px] uppercase font-bold tracking-wider text-zinc-400">
-                        <User size={12} /> @
-                        {msg[DB.CHAT.USERNAME] || "trainee_user"}
+                        <User size={12} /> User #{telegram_id}
                       </div>
                       <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium select-text text-zinc-800">
                         {msg[DB.CHAT.USER_QUERY]}
