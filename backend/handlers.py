@@ -1269,7 +1269,6 @@ async def handle_test_step(update: Update, context: ContextTypes.DEFAULT_TYPE, s
 
             save_test_result({
                 "telegram_id": t_id,
-                "username": update.effective_user.username or update.effective_user.first_name,
                 "admin_id": google_id,
                 "token_id": active_token_id,
                 "category": category,

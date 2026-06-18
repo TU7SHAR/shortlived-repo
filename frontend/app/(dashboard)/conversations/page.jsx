@@ -52,13 +52,26 @@ export default function ConversationsPage() {
       return;
     }
 
+    // Fetch display names from onboarding_leads
+    const { data: leads } = await supabase
+      .from("onboarding_leads")
+      .select("telegram_id, full_name")
+      .eq("admin_id", user.id);
+
+    const nameMap = {};
+    if (leads) {
+      leads.forEach((lead) => {
+        if (lead.full_name) nameMap[lead.telegram_id] = lead.full_name;
+      });
+    }
+
     const groupedUsers = {};
     chats.forEach((msg) => {
       if (!msg.telegram_id) return;
 
       if (!groupedUsers[msg.telegram_id]) {
         groupedUsers[msg.telegram_id] = {
-          username: msg.username || "anonymous_user",
+          username: nameMap[msg.telegram_id] || `User #${msg.telegram_id}`,
           messages: [],
           lastInteraction: msg.created_at,
         };

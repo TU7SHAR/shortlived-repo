@@ -51,6 +51,19 @@ export default function ApiUsagePage() {
         .select("telegram_id, user_query, bot_response, created_at")
         .eq("admin_id", user.id);
 
+      // Fetch display names from onboarding_leads
+      const { data: leads } = await supabase
+        .from("onboarding_leads")
+        .select("telegram_id, full_name")
+        .eq("admin_id", user.id);
+
+      const nameMap = {};
+      if (leads) {
+        leads.forEach((lead) => {
+          if (lead.full_name) nameMap[lead.telegram_id] = lead.full_name;
+        });
+      }
+
       if (!error && chats) {
         let totalCents = 0;
         let totalT = 0;
@@ -91,7 +104,7 @@ export default function ApiUsagePage() {
           if (!userMap[chat.telegram_id]) {
             userMap[chat.telegram_id] = {
               id: chat.telegram_id,
-              username: `User #${chat.telegram_id}`,
+              username: nameMap[chat.telegram_id] || `User #${chat.telegram_id}`,
               queries: 0,
               tokens: 0,
             };
@@ -316,11 +329,11 @@ export default function ApiUsagePage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="font-bold font-display text-navy text-[0.95rem] flex items-center gap-1.5">
-                          <UserCheck size={14} className="text-primary/70" /> @
+                          <UserCheck size={14} className="text-primary/70" />{" "}
                           {user.username}
                         </span>
                         <span className="text-[10px] text-grey-400 font-mono mt-1 font-semibold tracking-wide">
-                          Profile ID: {user.id}
+                          Telegram ID: {user.id}
                         </span>
                       </div>
                     </td>

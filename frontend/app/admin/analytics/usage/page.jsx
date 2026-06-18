@@ -12,8 +12,20 @@ export default async function ApiUsagePage() {
   // 1. Fetch all chat analytics to aggregate
   const { data: interactions } = await supabaseAdmin
     .from("chat_analytics")
-    .select("telegram_id, username, created_at")
+    .select("telegram_id, created_at")
     .order("created_at", { ascending: false });
+
+  // Fetch display names from onboarding_leads
+  const { data: leads } = await supabaseAdmin
+    .from("onboarding_leads")
+    .select("telegram_id, full_name");
+
+  const nameMap = {};
+  if (leads) {
+    leads.forEach((lead) => {
+      if (lead.full_name) nameMap[lead.telegram_id] = lead.full_name;
+    });
+  }
 
   // 2. Aggregate Data in Javascript (The Engine)
   const totalRequests = interactions?.length || 0;
@@ -25,7 +37,7 @@ export default async function ApiUsagePage() {
     if (!userStats[id]) {
       userStats[id] = {
         id,
-        username: item.username || "anonymous",
+        username: nameMap[id] || `User #${id}`,
         count: 0,
       };
     }

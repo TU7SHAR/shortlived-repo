@@ -50,7 +50,25 @@ export default function AnalyticsPage() {
       .eq("admin_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (tests) setResults(tests);
+    // Fetch display names from onboarding_leads
+    const { data: leads } = await supabase
+      .from("onboarding_leads")
+      .select("telegram_id, full_name")
+      .eq("admin_id", user.id);
+
+    const nameMap = {};
+    if (leads) {
+      leads.forEach((lead) => {
+        if (lead.full_name) nameMap[lead.telegram_id] = lead.full_name;
+      });
+    }
+
+    if (tests) {
+      setResults(tests.map(t => ({
+        ...t,
+        display_name: nameMap[t.telegram_id] || `User #${t.telegram_id}`
+      })));
+    }
     setLoading(false);
   };
 
@@ -201,7 +219,7 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="min-w-0 flex flex-col">
                       <span className="font-bold font-display text-navy text-[1.1rem] truncate">
-                        @{result.username || "anonymous_trainee"}
+                        {result.display_name || `User #${result[DB.TESTS.TELEGRAM_ID]}`}
                       </span>
                       <div className="flex items-center space-x-2 text-xs text-grey-400 font-medium mt-1">
                         <span className="font-mono bg-grey-50 border border-grey-100 px-2 py-0.5 rounded-md text-[10px] text-grey-500 font-bold uppercase tracking-wider">
