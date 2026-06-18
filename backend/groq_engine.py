@@ -29,7 +29,7 @@ prompt = ChatPromptTemplate.from_messages([
 ])
 
 async def get_groq_response(user_message: str, context: str, temperature: float = 0.3) -> str:
-    MAX_CHARS = 25000
+    MAX_CHARS = 110000
     if len(context) > MAX_CHARS:
         context = context[:MAX_CHARS] + "\n... [Context truncated to fit AI memory limits]"
         
