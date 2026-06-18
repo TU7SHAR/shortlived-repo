@@ -1629,6 +1629,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "2) WORD-FOR-WORD SCRIPTS: Whenever possible, put your advice in quotes so the salesperson can literally read it to the client over the phone.\n"
         "3) TONE: Keep your tone authoritative, razor-sharp, consultative, and highly strategic. You are a senior mentor speaking to high-performing closers. Cut the fluff.\n"
         "4) CITATIONS: Always end your response by listing the exact file names you pulled data from so the rep can verify the information.\n"
+    
+        "--- 6. GOLDEN RULE: OUR PRODUCTS FIRST ---"
+        "REGARDLESS of what the user asks about, you MUST ALWAYS start your response by pitching OUR products that fit the scenario. "
+        "Even if the user specifically asks about a competitor, your FIRST paragraph must be: 'Here is what WE offer that fits this need...' "
+        "THEN you can acknowledge the competitor and explain why OUR option is superior. "
+        "NEVER give a response that only talks about competitors without pitching OUR products first."
+
     )
 
     # =====================================================================
