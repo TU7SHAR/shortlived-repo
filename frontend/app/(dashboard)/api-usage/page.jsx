@@ -48,7 +48,7 @@ export default function ApiUsagePage() {
 
       const { data: chats, error } = await supabase
         .from("chat_analytics")
-        .select("telegram_id, username, user_query, bot_response, created_at")
+        .select("telegram_id, user_query, bot_response, created_at")
         .eq("admin_id", user.id);
 
       if (!error && chats) {
@@ -91,7 +91,7 @@ export default function ApiUsagePage() {
           if (!userMap[chat.telegram_id]) {
             userMap[chat.telegram_id] = {
               id: chat.telegram_id,
-              username: chat.username || "Unknown",
+              username: `User #${chat.telegram_id}`,
               queries: 0,
               tokens: 0,
             };
