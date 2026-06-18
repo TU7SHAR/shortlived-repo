@@ -97,8 +97,10 @@ export default function BotSettings() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2 mb-1">
-            <Settings size={22} className="text-blue-600" />
+          <h1 className="text-[1.6rem] md:text-[2rem] font-bold text-navy font-display tracking-tight flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 rounded-[10px] bg-primary-light flex items-center justify-center shrink-0">
+              <Settings size={22} className="text-blue-600" />
+            </div>
             Bot Settings
           </h1>
           <p className="text-sm text-slate-500">

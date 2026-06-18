@@ -7,8 +7,8 @@ class TblTokens:
     CREATED_AT = "created_at"
     IS_USED = "is_used"
     USED_BY_ID = "used_by_telegram_id"
+    USED_BY_USER = "used_by_username"  # snapshot at activation time
     TOKEN_TYPE = "token_type"
-    USED_BY_USER = "used_by_username"
     CAPTION = "caption"
     IS_REVOKED = "is_revoked"
     SENT_TO = "sent_to"
@@ -18,6 +18,7 @@ class TblUsers:
     ID = "telegram_id"
     TOKEN_ID = "token_id"
     ADMIN_ID = "admin_id"
+    USERNAME = "username"
     ACTIVATED_AT = "activated_at"
     CREATED_AT = "created_at"
     IS_BANNED = "is_banned"
@@ -36,7 +37,6 @@ class TblChat:
     TABLE = "chat_analytics"
     ID = "id"
     TELEGRAM_ID = "telegram_id"
-    USERNAME = "username"
     USER_QUERY = "user_query"
     BOT_RESPONSE = "bot_response"
     ADMIN_ID = "admin_id"
@@ -47,17 +47,14 @@ class TblFiles:
     TABLE = "ingested_files"
     ID = "id"
     FILENAME = "filename"
-    UPLOADED_BY_USER = "uploaded_by_username"
     UPLOADED_BY_ID = "uploaded_by_telegram_id"
     CREATED_AT = "created_at"
     ADMIN_ID = "admin_id"
     CREATED_BY = "admin_id"  # backward compat alias
     CATEGORY = "category"
     VECTOR_TEXT_COUNT = "vector_text_count"
-    IS_CONDENSED = "is_condensed"
     CONDENSATION_STATUS = "condensation_status"
     VECTOR_CHUNK_COUNT = "vector_chunk_count"
-    COMPRESSION_RATIO = "compression_ratio"
     CONDENSATION_COMPLETED_AT = "condensation_completed_at"
 
 class TblUserStates:
@@ -98,23 +95,20 @@ class TblTests:
     TOTAL_QUESTIONS = "total_questions"
     REMARKS = "remarks"
     CREATED_AT = "created_at"
-    ADMIN_ID = "admin_id" 
-    USERNAME = "username"
+    ADMIN_ID = "admin_id"
 
-# --- NEW PHASE 2 TABLES ---
+# --- PHASE 2 TABLES ---
 
 class TblCondensedCards:
     TABLE = "condensed_knowledge_cards"
     ID = "id"
     FILE_ID = "file_id"
-    FILE_NAME = "file_name"
     ADMIN_ID = "admin_id"
     CARD_JSON = "card_json"
     CARD_SIZE_BYTES = "card_size_bytes"
     ORIGINAL_SIZE_BYTES = "original_size_bytes"
     ORIGINAL_CHUNK_COUNT = "original_chunk_count"
     CONDENSED_CHUNK_COUNT = "condensed_chunk_count"
-    COMPRESSION_RATIO = "compression_ratio"
     PROCESSING_TIME = "processing_time_seconds"
     EXTRACTION_CALLS = "extraction_calls"
     REDUCTION_CALLS = "reduction_calls"
@@ -148,7 +142,6 @@ class TblCondensationLogs:
     TABLE = "condensation_logs"
     ID = "id"
     ADMIN_ID = "admin_id"
-    FILE_NAME = "file_name"
     FILE_ID = "file_id"
     STAGE = "stage"
     STATUS = "status"
@@ -165,7 +158,7 @@ class TblCondensationMetrics:
     ADMIN_ID = "admin_id"
     METRIC_TYPE = "metric_type"
     METRIC_VALUE = "metric_value"
-    FILE_NAME = "file_name"
+    FILE_ID = "file_id"
     MEASURED_AT = "measured_at"
 
 class TblEmbeddingMetrics:
@@ -175,7 +168,7 @@ class TblEmbeddingMetrics:
     METRIC_TYPE = "metric_type"
     METRIC_VALUE = "metric_value"
     MEASURED_AT = "measured_at"
-    FILE_NAME = "file_name"
+    FILE_ID = "file_id"
     QUERY_TYPE = "query_type"
 
 class TblEmbeddings:
@@ -196,7 +189,6 @@ class TblFileChunks:
     TABLE = "file_chunks"
     ID = "id"
     FILE_ID = "file_id"
-    FILE_NAME = "file_name"
     CHUNK_INDEX = "chunk_index"
     CONTENT = "content"
     CONTENT_HASH = "content_hash"
