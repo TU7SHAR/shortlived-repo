@@ -1,15 +1,21 @@
 """
-Unified LLM Client — supports both Groq and Google Gemini.
+Unified LLM Client — supports both Groq and Google Gemini with AUTO-DETECTION
+and automatic runtime fallback.
 
-Switch providers with a single env var:  LLM_PROVIDER=groq  or  LLM_PROVIDER=gemini
+How provider selection works:
+    LLM_PROVIDER=auto    (default) -> use whichever key is present. If both are
+                                      present, try Groq first then Gemini.
+    LLM_PROVIDER=groq              -> prefer Groq, fall back to Gemini on failure
+    LLM_PROVIDER=gemini            -> prefer Gemini, fall back to Groq on failure
 
-Public API:
+On every call we try providers in priority order. If the first provider raises
+(missing/invalid key, rate limit, network error), we automatically try the next
+one. This means "use whichever key is there and working" just works.
+
+Public API (unchanged):
     llm_complete(system_prompt, user_prompt, temperature, max_tokens, json_mode)  -> str   (sync)
     allm_complete(system_prompt, user_prompt, temperature, max_tokens, json_mode) -> str   (async)
     get_provider_name() -> str
-
-Both providers expose the SAME interface so the rest of the codebase doesn't
-care which one is active. Only this file knows about provider SDK differences.
 """
 
 import logging
@@ -32,7 +38,7 @@ def _init_groq():
     if _groq_client is None:
         from groq import Groq
         _groq_client = Groq(api_key=GROQ_API_KEY)
-        logger.info(f"LLM Provider initialized: GROQ ({GROQ_MODEL})")
+        logger.info(f"Groq client initialized ({GROQ_MODEL})")
     return _groq_client
 
 
@@ -42,35 +48,47 @@ def _init_gemini():
         from google import genai
         _genai = genai
         _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        logger.info(f"LLM Provider initialized: GEMINI ({GEMINI_MODEL})")
+        logger.info(f"Gemini client initialized ({GEMINI_MODEL})")
     return _gemini_client
 
 
-def _active_provider() -> str:
-    """Resolve which provider to use, with graceful fallback."""
-    if LLM_PROVIDER == "gemini" and GEMINI_API_KEY:
-        return "gemini"
-    if LLM_PROVIDER == "groq" and GROQ_API_KEY:
-        return "groq"
-    # Fallbacks if the configured provider has no key
+def _provider_priority() -> list:
+    """
+    Returns an ordered list of providers to attempt, based on which API keys
+    are present and the LLM_PROVIDER preference. Only providers with a key are
+    included.
+    """
+    available = []
     if GROQ_API_KEY:
-        return "groq"
+        available.append("groq")
     if GEMINI_API_KEY:
-        return "gemini"
-    raise RuntimeError("No LLM API key configured. Set GROQ_API_KEY or GEMINI_API_KEY in .env")
+        available.append("gemini")
+
+    if not available:
+        raise RuntimeError("No LLM API key configured. Set GROQ_API_KEY and/or GEMINI_API_KEY in .env")
+
+    # Apply preference: move the preferred provider to the front (if it has a key)
+    preferred = LLM_PROVIDER
+    if preferred in ("groq", "gemini") and preferred in available:
+        available.remove(preferred)
+        available.insert(0, preferred)
+    # "auto" or unknown -> keep natural order (groq first, then gemini)
+
+    return available
 
 
 def get_provider_name() -> str:
-    """Human-readable active provider for logging."""
+    """Human-readable view of the active priority order, for logging."""
     try:
-        provider = _active_provider()
+        order = _provider_priority()
     except RuntimeError:
         return "None"
-    return f"Gemini ({GEMINI_MODEL})" if provider == "gemini" else f"Groq ({GROQ_MODEL})"
+    label = {"groq": f"Groq({GROQ_MODEL})", "gemini": f"Gemini({GEMINI_MODEL})"}
+    return " -> ".join(label[p] for p in order)
 
 
 # ═══════════════════════════════════════════════════════
-# GROQ
+# PROVIDER IMPLEMENTATIONS
 # ═══════════════════════════════════════════════════════
 
 def _groq_complete(system_prompt, user_prompt, temperature, max_tokens, json_mode) -> str:
@@ -90,10 +108,6 @@ def _groq_complete(system_prompt, user_prompt, temperature, max_tokens, json_mod
     return resp.choices[0].message.content.strip()
 
 
-# ═══════════════════════════════════════════════════════
-# GEMINI
-# ═══════════════════════════════════════════════════════
-
 def _gemini_complete(system_prompt, user_prompt, temperature, max_tokens, json_mode) -> str:
     client = _init_gemini()
     full_prompt = f"{system_prompt}\n\n{user_prompt}"
@@ -111,6 +125,9 @@ def _gemini_complete(system_prompt, user_prompt, temperature, max_tokens, json_m
     return (resp.text or "").strip()
 
 
+_IMPL = {"groq": _groq_complete, "gemini": _gemini_complete}
+
+
 # ═══════════════════════════════════════════════════════
 # PUBLIC API
 # ═══════════════════════════════════════════════════════
@@ -122,11 +139,27 @@ def llm_complete(
     max_tokens: int = 4000,
     json_mode: bool = False,
 ) -> str:
-    """Synchronous completion. Used by condensation, constraint extraction, summarization."""
-    provider = _active_provider()
-    if provider == "gemini":
-        return _gemini_complete(system_prompt, user_prompt, temperature, max_tokens, json_mode)
-    return _groq_complete(system_prompt, user_prompt, temperature, max_tokens, json_mode)
+    """
+    Synchronous completion. Tries providers in priority order and falls back
+    to the next provider if one fails.
+    """
+    order = _provider_priority()
+    last_error = None
+
+    for provider in order:
+        try:
+            result = _IMPL[provider](system_prompt, user_prompt, temperature, max_tokens, json_mode)
+            return result
+        except Exception as e:
+            last_error = e
+            # If there's another provider to try, log and continue
+            if provider != order[-1]:
+                logger.warning(f"LLM provider '{provider}' failed ({e}). Falling back to next provider...")
+            else:
+                logger.error(f"LLM provider '{provider}' failed and no fallback left: {e}")
+
+    # All providers failed
+    raise RuntimeError(f"All LLM providers failed. Last error: {last_error}")
 
 
 async def allm_complete(
@@ -136,7 +169,7 @@ async def allm_complete(
     max_tokens: int = 4096,
     json_mode: bool = False,
 ) -> str:
-    """Async completion. Used by chat responses. Wraps the sync SDK call in a thread."""
+    """Async completion. Wraps the sync (fallback-aware) call in a thread."""
     return await asyncio.to_thread(
         llm_complete, system_prompt, user_prompt, temperature, max_tokens, json_mode
     )
