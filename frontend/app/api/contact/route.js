@@ -5,21 +5,21 @@ export async function POST(request) {
   try {
     const { name, email, message } = await request.json();
 
-    // 1. Configure SMTP using your exact .env variables
+    // Gmail API OAuth2 transport
     const transporter = nodemailer.createTransport({
-      host: process.env.smtp_host,
-      port: Number(process.env.smtp_port),
-      secure: false, // false for port 587
+      service: "gmail",
       auth: {
-        user: process.env.smtp_name,
-        pass: process.env.smtp_password,
+        type: "OAuth2",
+        user: process.env.GMAIL_USER,
+        clientId: process.env.GMAIL_CLIENT_ID,
+        clientSecret: process.env.GMAIL_CLIENT_SECRET,
+        refreshToken: process.env.GMAIL_REFRESH_TOKEN,
       },
     });
 
-    // 2. Format the email
     const mailOptions = {
-      from: process.env.smtp_name,
-      to: process.env.smtp_name, // Sends the contact request to yourself
+      from: process.env.GMAIL_USER,
+      to: process.env.GMAIL_USER, // Sends the contact request to yourself
       subject: `New Contact Request from ${name}`,
       text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
       html: `
@@ -34,7 +34,6 @@ export async function POST(request) {
       `,
     };
 
-    // 3. Send the email
     await transporter.sendMail(mailOptions);
 
     return NextResponse.json({
@@ -42,7 +41,7 @@ export async function POST(request) {
       message: "Message sent successfully",
     });
   } catch (error) {
-    console.error("SMTP Error:", error);
+    console.error("Gmail API Error:", error);
     return NextResponse.json(
       { success: false, message: "Failed to send message" },
       { status: 500 },
