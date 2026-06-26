@@ -3,20 +3,36 @@
 import nodemailer from "nodemailer";
 import { siteConfig } from "../utils/config";
 
+/**
+ * Gmail API (OAuth2) transporter.
+ *
+ * How to get the credentials:
+ * 1. Go to Google Cloud Console → APIs & Services → Enable "Gmail API"
+ * 2. Create OAuth2 credentials (Web application type)
+ * 3. Use OAuth2 Playground to get a refresh token for salesji.team@gmail.com
+ * 4. Put the values in .env.local (see README.md)
+ *
+ * Env vars needed:
+ *   GMAIL_USER          = salesji.team@gmail.com
+ *   GMAIL_CLIENT_ID     = xxxx.apps.googleusercontent.com
+ *   GMAIL_CLIENT_SECRET = GOCSPX-xxxx
+ *   GMAIL_REFRESH_TOKEN = 1//xxxx
+ */
 const transporter = nodemailer.createTransport({
-  host: process.env.smtp_host || "smtp.gmail.com",
-  port: parseInt(process.env.smtp_port || "587"),
-  secure: false,
+  service: "gmail",
   auth: {
-    user: process.env.smtp_name,
-    pass: process.env.smtp_password,
+    type: "OAuth2",
+    user: process.env.GMAIL_USER,
+    clientId: process.env.GMAIL_CLIENT_ID,
+    clientSecret: process.env.GMAIL_CLIENT_SECRET,
+    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
   },
 });
 
 export async function sendWelcomeEmail(toEmail) {
   try {
     const mailOptions = {
-      from: `"${siteConfig.name}" <${process.env.smtp_name}>`,
+      from: `"${siteConfig.name}" <${process.env.GMAIL_USER}>`,
       to: toEmail,
       subject: `Welcome to the ${siteConfig.name} Dashboard!`,
       html: `
@@ -32,7 +48,7 @@ export async function sendWelcomeEmail(toEmail) {
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("SMTP Error:", error);
+    console.error("Gmail API Error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -40,7 +56,7 @@ export async function sendWelcomeEmail(toEmail) {
 export async function sendInviteLink(toEmail, inviteLink, caption) {
   try {
     const mailOptions = {
-      from: `"${siteConfig.name}" <${process.env.smtp_name}>`,
+      from: `"${siteConfig.name}" <${process.env.GMAIL_USER}>`,
       to: toEmail,
       subject: `You've been invited to use ${siteConfig.name}!`,
       html: `
@@ -58,7 +74,7 @@ export async function sendInviteLink(toEmail, inviteLink, caption) {
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("SMTP Error:", error);
+    console.error("Gmail API Error:", error);
     return { success: false, error: error.message };
   }
 }
