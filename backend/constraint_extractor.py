@@ -15,10 +15,9 @@ import json
 import logging
 import re
 from typing import Dict, List, Tuple, Optional
-from groq import Groq
+from llm_client import llm_complete
 
 logger = logging.getLogger(__name__)
-groq_client = Groq()
 
 
 class ConstraintExtractor:
@@ -221,23 +220,13 @@ JSON FORMAT (only include keys with values):
 }}
 """
             
-            response = groq_client.chat.completions.create(
-                model="mixtral-8x7b-32768",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Extract constraints. Output ONLY valid JSON. No markdown, no code blocks."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
+            result_text = llm_complete(
+                system_prompt="Extract constraints. Output ONLY valid JSON. No markdown, no code blocks.",
+                user_prompt=prompt,
+                temperature=0.1,
                 max_tokens=200,
-                temperature=0.1  # Very low for factual extraction
-            )
-            
-            result_text = response.choices[0].message.content.strip()
+                json_mode=True,
+            ).strip()
             
             # Remove markdown code blocks if present
             if result_text.startswith("```"):
