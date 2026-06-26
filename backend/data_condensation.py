@@ -2,11 +2,10 @@ import json
 import logging
 import time
 from typing import Dict, List, Any, Tuple, Optional
-from groq import Groq
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from config import model
+from llm_client import llm_complete
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
@@ -22,7 +21,6 @@ except ImportError:
     TblFiles = None
 
 logger = logging.getLogger(__name__)
-groq_client = Groq()
 
 @dataclass
 class CondensationMetrics:
@@ -79,39 +77,35 @@ class FactExtractionEngine:
 
     @staticmethod
     def extract_facts_from_chunk(text_chunk: str, chunk_index: int, context_name: str = "Unknown Context", max_retries: int = 5) -> Optional[Dict[str, Any]]:
-        """Processes a chunk through Groq and dynamically reads 429 wait times."""
+        """Processes a chunk through the configured LLM provider with rate-limit aware retries."""
         prompt = FactExtractionEngine.GENERALIZED_EXTRACTION_PROMPT.replace("{text_chunk}", text_chunk[:8000]).replace("{context_name}", context_name)
         
         for attempt in range(max_retries):
             try:
-                time.sleep(2)  # Base delay between chunks to prevent hitting the limit in the first place
+                time.sleep(1)  # Base delay between chunks to ease rate limits
                 
-                completion = groq_client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": "You are a generalized data extraction AI. Output ONLY valid JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
+                response_text = llm_complete(
+                    system_prompt="You are a generalized data extraction AI. Output ONLY valid JSON.",
+                    user_prompt=prompt,
                     temperature=0.1,
-                    max_tokens=4000, 
-                    response_format={"type": "json_object"} 
+                    max_tokens=4000,
+                    json_mode=True,
                 )
                 
-                response_text = completion.choices[0].message.content
                 clean_json = response_text.replace("```json", "").replace("```", "").strip()
                 return json.loads(clean_json)
                 
             except Exception as e:
                 error_str = str(e)
-                if "429" in error_str or "Too Many Requests" in error_str:
-                    # Look for Groq telling us exactly how long to wait (e.g., "in 35.000000 seconds")
+                if "429" in error_str or "Too Many Requests" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    # Look for an explicit wait time hint (e.g., "in 35.000000 seconds")
                     match = re.search(r'in (\d+\.?\d*) seconds', error_str)
                     if match:
-                        sleep_time = float(match.group(1)) + 1.0 # Add 1s buffer
+                        sleep_time = float(match.group(1)) + 1.0  # Add 1s buffer
                     else:
-                        sleep_time = (2 ** attempt) * 2  # Fallback if we can't find the exact number
+                        sleep_time = (2 ** attempt) * 2  # Exponential backoff fallback
                         
-                    logger.warning(f"Groq API Limit. Pausing for {sleep_time:.1f} seconds before retrying chunk {chunk_index}...")
+                    logger.warning(f"LLM Rate Limit. Pausing for {sleep_time:.1f}s before retrying chunk {chunk_index}...")
                     time.sleep(sleep_time)
                 else:
                     logger.error(f"Extraction failed for chunk {chunk_index}: {e}")
@@ -167,18 +161,13 @@ MERGE RULES:
             facts_json = json.dumps(extracted_facts, indent=2)
             prompt = FactReductionEngine.REDUCTION_PROMPT.format(facts_json=facts_json)
             
-            response = groq_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": "You are a JSON merging specialist. Return ONLY valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500,
+            response_text = llm_complete(
+                system_prompt="You are a JSON merging specialist. Return ONLY valid JSON.",
+                user_prompt=prompt,
                 temperature=0.1,
-                response_format={"type": "json_object"}
-            )
-            
-            response_text = response.choices[0].message.content.strip()
+                max_tokens=1500,
+                json_mode=True,
+            ).strip()
             
             # --- ROBUST JSON PARSING ---
             start_idx = response_text.find('{')

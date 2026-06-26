@@ -15,12 +15,9 @@ Integration: Add this to your handlers.py training flow
 import json
 import logging
 from typing import Dict, List, Tuple, Optional
-from groq import Groq
-from config import GROQ_API_KEY
-from config import model
+from llm_client import llm_complete
 
 logger = logging.getLogger(__name__)
-groq_client = Groq(api_key=GROQ_API_KEY)
 
 
 class SlidingWindowMemory:
@@ -184,24 +181,13 @@ Rules:
 - If specific numbers/requirements were mentioned, include them
 - Do NOT use more than 300 characters total"""
             
-            # Call Groq with VERY low temperature for consistency
-            response = groq_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a concise conversation summarizer. Keep responses to exactly 3 sentences, under 300 chars."
-                    },
-                    {
-                        "role": "user",
-                        "content": summary_prompt
-                    }
-                ],
+            # Call the configured LLM with VERY low temperature for consistency
+            summary_text = llm_complete(
+                system_prompt="You are a concise conversation summarizer. Keep responses to exactly 3 sentences, under 300 chars.",
+                user_prompt=summary_prompt,
+                temperature=0.1,
                 max_tokens=200,
-                temperature=0.1  # Very low = consistent summaries
-            )
-            
-            summary_text = response.choices[0].message.content.strip()
+            ).strip()
             
             # Safety: truncate if somehow exceeded
             if len(summary_text) > SlidingWindowMemory.MAX_SUMMARY_LENGTH:
