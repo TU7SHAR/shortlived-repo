@@ -22,7 +22,8 @@ groq==0.37.1
 google-genai==1.73.1
 
 # --- Local embeddings (lightweight, ONNX) ---
-fastembed==0.4.2
+# >=0.5.0 required for Python 3.13 support (older builds cap at <3.13)
+fastembed>=0.5.0
 
 # --- Clustering for website condensation ---
 numpy==2.4.4
