@@ -7,11 +7,13 @@ ENV = os.getenv("ENVIRONMENT", "development")
 
 # ═══════════════════════════════════════════════════════
 # LLM PROVIDER CONFIGURATION
-# Set LLM_PROVIDER to "groq" or "gemini" in your .env
-#   - groq   : fast, free tier, good for local/dev
-#   - gemini : production keys, 1M context, no daily token cap
+# LLM_PROVIDER options:
+#   auto   : (default) use whichever key is present & working,
+#            with automatic runtime fallback to the other provider
+#   groq   : prefer Groq (still falls back to Gemini if Groq fails)
+#   gemini : prefer Gemini (still falls back to Groq if Gemini fails)
 # ═══════════════════════════════════════════════════════
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq").lower()
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").lower()
 
 # Groq config
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
