@@ -70,6 +70,7 @@ export const landingConfig = {
 
 export const siteConfig = {
   name: "SALESJI",
+  botUsername: "salesji_bot",
   tagline: "AI Telegram Bot Workspace",
   description:
     "Advanced onboarding, tracking, and training matrix for Telegram user management. Optimize your team workflows.",

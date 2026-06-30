@@ -214,9 +214,7 @@ export default function DashboardHome() {
           ? window.location.hostname === "localhost" ||
             window.location.hostname === "127.0.0.1"
           : process.env.NODE_ENV === "development";
-      const botUsername = isLocalhost
-        ? "devRagbot"
-        : siteConfig.botUsername || "DrishRag_Bot";
+      const botUsername = siteConfig.botUsername || "salesji_bot";
       const generatedLink = `https://t.me/${botUsername}?start=${uniqueToken}`;
 
       const payload = {
