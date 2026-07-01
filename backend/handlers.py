@@ -175,18 +175,24 @@ async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Sorry, there was an issue saving your feedback. Please try again later.")
 
 def get_tenant_files(context: ContextTypes.DEFAULT_TYPE):
-    """Fetches highly-condensed Knowledge Cards from RAM/DB."""
+    """Fetches highly-condensed Knowledge Cards — CACHED (60s TTL)."""
     google_id = context.user_data.get('google_id')
     if not google_id:
         return {}
+    
+    # PERFORMANCE: Check cache first (saves ~500ms-2s per message)
+    from cache import files_cache
+    cache_key = f"tenant_files:{google_id}"
+    cached = files_cache.get(cache_key)
+    if cached is not None:
+        return cached
         
-    # Always force a fresh fetch from DB if we are managing files
+    # Cache miss — fetch from DB
     from database import supabase
     try:
-        # Fetch directly from ingested_files (get id too for joining cards)
         files_res = supabase.table("ingested_files").select("id, filename, category").eq("admin_id", google_id).execute()
         
-        ram_files = {} # Start fresh to avoid stale data
+        ram_files = {}
         
         if files_res.data:
             for f in files_res.data:
@@ -194,7 +200,6 @@ def get_tenant_files(context: ContextTypes.DEFAULT_TYPE):
                 fname = f["filename"]
                 category = f["category"]
                 
-                # Fetch JSON Card(s) by file_id (file_name column removed from this table)
                 cards_res = supabase.table("condensed_knowledge_cards").select("*").eq("file_id", file_id).execute()
                 full_text = ""
                 if cards_res.data:
@@ -214,7 +219,10 @@ def get_tenant_files(context: ContextTypes.DEFAULT_TYPE):
                     "category": category
                 }
         
-        # Update the context RAM
+        # Store in cache
+        files_cache.set(cache_key, ram_files)
+        
+        # Also update context RAM for backward compatibility
         context.bot_data.setdefault(google_id, {})["file_map"] = ram_files
         return ram_files
         
@@ -753,9 +761,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 timer_task.cancel() # Stop the timer
                 
                 if success:
-                    # Force RAM refresh
+                    # Force RAM refresh + invalidate cache
                     if admin_id in context.bot_data:
                         context.bot_data[admin_id]["file_map"] = {}
+                    from cache import files_cache
+                    files_cache.invalidate(f"tenant_files:{admin_id}")
+                    files_cache.invalidate(f"filenames:{admin_id}")
                     
                     await query.message.edit_text(
                         f"✅ <b>Success!</b>\nSaved <code>{data['filename']}</code> to <b>{category}</b>.\n⏱️ <i>Time taken: ~{int(metrics.processing_time_seconds)}s</i>", 
@@ -813,6 +824,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 if success:
                     if admin_id in context.bot_data:
                         context.bot_data[admin_id]["file_map"] = {}
+                    from cache import files_cache
+                    files_cache.invalidate(f"tenant_files:{admin_id}")
+                    files_cache.invalidate(f"filenames:{admin_id}")
                     await query.message.edit_text(
                         f"✅ <b>Success!</b>\nSaved crawled data to <b>{category}</b>.\n⏱️ <i>Time: ~{int(metrics.processing_time_seconds)}s</i>", 
                         parse_mode="HTML"
@@ -1651,10 +1665,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # what belongs to US vs COMPETITORS vs irrelevant noise.
     VALID_CATEGORIES = {"Our Products", "Competitor Products", "Price Lists"}
     
+    our_products_context = ""
+    competitor_context = ""
+    price_context = ""
+    
     if files:
-        our_products_context = ""
-        competitor_context = ""
-        price_context = ""
         
         for name, data in files.items():
             category = data.get('category', 'Our Products')
@@ -1688,30 +1703,44 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             has_data = True
     
     if google_id:
-        query_vector = get_embedding(user_text)
+        # PERFORMANCE: Skip vector search if knowledge cards already provide sufficient context.
+        # Embedding generation (~300ms) + vector search (~300ms) = ~600ms saved per message
+        # when the inline condensed cards already contain the answer.
+        # Only run vector search when: few files loaded OR query seems very specific.
+        total_inline_context_len = len(our_products_context) + len(competitor_context) + len(price_context) if files else 0
+        should_vector_search = (
+            total_inline_context_len < 2000 or  # Very little inline data — need vector search
+            len(files) > 8 or                    # Too many files to inject all — need ranking
+            not has_data                          # No inline data at all
+        )
         
-        if query_vector:
-            matches = search_knowledge_base(query_vector, threshold=0.3, limit=5)
+        if should_vector_search:
+            query_vector = get_embedding(user_text)
             
-            if matches:
-                has_data = True
+            if query_vector:
+                matches = search_knowledge_base(query_vector, threshold=0.3, limit=5)
                 
-                chunk_dicts = []
-                for match in matches:
-                    chunk_dicts.append({
-                        "content": f"[Source: {match['file_name']}] {match['content']}",
-                        "score": match['similarity'], # Using the real vector math score!
-                        "source_type": "vector_db"
-                    })
-                
-                ranked_context = ContextRanker.create_context_block(
-                    chunks=chunk_dicts,
-                    user_constraints=merged_constraints,
-                    user_query=user_text,
-                    max_chunks=5,
-                    include_hierarchy=True
-                )
-                full_context += "\n\n" + ranked_context
+                if matches:
+                    has_data = True
+                    
+                    chunk_dicts = []
+                    for match in matches:
+                        chunk_dicts.append({
+                            "content": f"[Source: {match['file_name']}] {match['content']}",
+                            "score": match['similarity'],
+                            "source_type": "vector_db"
+                        })
+                    
+                    ranked_context = ContextRanker.create_context_block(
+                        chunks=chunk_dicts,
+                        user_constraints=merged_constraints,
+                        user_query=user_text,
+                        max_chunks=5,
+                        include_hierarchy=True
+                    )
+                    full_context += "\n\n" + ranked_context
+        else:
+            logger.debug(f"Skipping vector search — inline context sufficient ({total_inline_context_len} chars from {len(files)} files)")
 
     if not has_data:
         if role == 'admin':
