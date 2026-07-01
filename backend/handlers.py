@@ -1338,10 +1338,22 @@ async def handle_training_step(update: Update, context: ContextTypes.DEFAULT_TYP
         metadata["history"] = []
         
         try:
-            supabase.table("onboarding_leads") \
-                .update({"training_status": "partial"}) \
-                .eq("telegram_id", t_id) \
-                .execute()
+            # Check if user has an onboarding row; if not (admin skipped onboarding), create one
+            existing = supabase.table("onboarding_leads").select("id").eq("telegram_id", t_id).execute()
+            if existing.data:
+                supabase.table("onboarding_leads") \
+                    .update({"training_status": "partial"}) \
+                    .eq("telegram_id", t_id) \
+                    .execute()
+            else:
+                # Admin or user who skipped onboarding — create a minimal lead record so dashboard tracks them
+                supabase.table("onboarding_leads").insert({
+                    "telegram_id": t_id,
+                    "admin_id": google_id,
+                    "full_name": username or "Unknown",
+                    "training_status": "partial"
+                }).execute()
+                logger.info(f"Created onboarding_leads record for {t_id} (skipped onboarding)")
         except Exception as e:
             logger.error(f"Failed to update training status to partial: {e}")
 
@@ -1467,9 +1479,10 @@ RULES:
         if current_lesson >= 2:
             update_user_state(t_id, mode="use", step=0, metadata={})
             try:
-                supabase.table("onboarding_leads").update({"training_status": "completed"}).eq("telegram_id", t_id).execute()
-            except Exception:
-                pass
+                result = supabase.table("onboarding_leads").update({"training_status": "completed"}).eq("telegram_id", t_id).execute()
+                logger.info(f"Training COMPLETED for {t_id}. DB update result: {len(result.data) if result.data else 0} rows affected")
+            except Exception as e:
+                logger.error(f"Failed to update training_status to completed for {t_id}: {e}")
             await update.message.reply_text("TRAINING COMPLETE!\n\nYou know our products AND how to counter every competitor.\nGo close deals. Type /menu to continue.")
             if google_id:
                 log_chat_interaction(t_id, username, text, "TRAINING COMPLETE", google_id, mode="training")

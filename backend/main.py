@@ -22,6 +22,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Silence noisy pdfminer font warnings (benign, floods logs on every PDF upload)
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
+
 def main() -> None:
     logger.info("Initializing Document Assistant Bot...")
     
