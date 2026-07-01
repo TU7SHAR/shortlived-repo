@@ -1,10 +1,21 @@
 import logging
 import sys
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, PicklePersistence
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from config import TELEGRAM_TOKEN, WEBHOOK_URL, PORT, WEBHOOK_SECRET_TOKEN
 import handlers
 from database import supabase
+
+# ═══════════════════════════════════════════════════════
+# PERFORMANCE: Increase thread pool from default 5 → 15
+# This allows 15 concurrent LLM calls instead of 5
+# (each LLM call blocks a thread for 2-8s)
+# ═══════════════════════════════════════════════════════
+asyncio.get_event_loop().set_default_executor(
+    ThreadPoolExecutor(max_workers=15)
+)
 
 async def keep_supabase_alive(context):
     """Silently pings the database every 5 minutes to prevent connection drops."""
@@ -28,8 +39,11 @@ logging.getLogger("pdfminer").setLevel(logging.ERROR)
 def main() -> None:
     logger.info("Initializing Document Assistant Bot...")
     
-    persistence = PicklePersistence(filepath="bot_memory.pickle")
-    application = Application.builder().token(TELEGRAM_TOKEN).persistence(persistence).build()
+    # PERFORMANCE: Removed PicklePersistence — eliminates disk I/O bottleneck,
+    # prevents pickle corruption on unclean restarts (was causing 4000+ restart loops).
+    # All critical state (user mode, constraints, onboarding) is already in Supabase.
+    # bot_data/user_data are now ephemeral (rebuilt on demand from DB).
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
     
     application.add_error_handler(handlers.error_handler)
     application.job_queue.run_repeating(keep_supabase_alive, interval=300, first=10)
