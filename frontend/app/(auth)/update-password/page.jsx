@@ -93,7 +93,7 @@ export default function UpdatePassword() {
         {/* Header & Logo (Centered) */}
         <div className="flex flex-col items-center justify-center mb-8">
           <Link
-            href="/"
+            href="https://salesji.com"
             className="flex items-center gap-2.5 mb-6 group pointer-events-none"
           >
             <div className="w-9 h-9 rounded-[10px] bg-blue-600 flex items-center justify-center shadow-md">

@@ -67,7 +67,7 @@ export default function ForgotPassword() {
       <div className="auth-card relative z-10 w-full max-w-[460px] bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] p-8 sm:p-10 border border-slate-100">
         {/* Header & Logo (Centered) */}
         <div className="flex flex-col items-center justify-center mb-8">
-          <Link href="/" className="flex items-center gap-2.5 mb-6 group">
+          <Link href="https://salesji.com" className="flex items-center gap-2.5 mb-6 group">
             <div className="w-9 h-9 rounded-[10px] bg-blue-600 flex items-center justify-center shadow-md">
               <Shield size={18} className="text-white" />
             </div>

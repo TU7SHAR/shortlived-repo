@@ -32,7 +32,7 @@ export default function NotFound() {
 
         {/* Bold CTA Button */}
         <Link
-          href="/"
+          href="/login"
           className="group inline-flex items-center justify-center bg-zinc-950 text-white px-8 py-4 rounded-xl font-bold hover:bg-zinc-800 transition-all duration-200 shadow-xl hover:-translate-y-0.5"
         >
           <span className="flex items-center gap-2">
