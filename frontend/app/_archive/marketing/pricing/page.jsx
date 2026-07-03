@@ -1,380 +1,321 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import Navbar from "../components/landing/Navbar";
 import { siteConfig } from "@/app/utils/config";
+
+const MARKETING_URL = "https://salesji.com";
+
+const plans = [
+  {
+    name: "Starter",
+    monthly: 49,
+    annual: 39,
+    annualSavings: "$120/yr",
+    desc: "Perfect for small SME sales teams getting started with AI-powered enablement.",
+    popular: false,
+    features: [
+      { text: "Up to 5 sales reps", included: true },
+      { text: "WhatsApp bot + Web app chat", included: true },
+      { text: "1 knowledge base (500 items)", included: true },
+      { text: "Objection handling library", included: true },
+      { text: "Basic script generation", included: true },
+      { text: "Asset retrieval", included: true },
+      { text: "Telegram integration", included: false },
+      { text: "Competitive battlecards", included: false },
+      { text: "Analytics dashboard", included: false },
+    ],
+    cta: "Get Started",
+    ctaStyle: "outline",
+  },
+  {
+    name: "Growth",
+    monthly: 149,
+    annual: 119,
+    annualSavings: "$360/yr",
+    desc: "For growing teams that need competitive intelligence and personalised scripts.",
+    popular: true,
+    features: [
+      { text: "Up to 25 sales reps", included: true },
+      { text: "WhatsApp + Telegram + Web app", included: true },
+      { text: "3 knowledge bases (2,000 items each)", included: true },
+      { text: "Full objection playbooks", included: true },
+      { text: "Personalised script generation", included: true },
+      { text: "Asset retrieval + smart search", included: true },
+      { text: "Competitive battlecards (up to 10)", included: true },
+      { text: "Usage analytics dashboard", included: true },
+      { text: "Custom AI personality", included: false },
+    ],
+    cta: "Book a Demo",
+    ctaStyle: "primary",
+  },
+  {
+    name: "Enterprise",
+    monthly: null,
+    annual: null,
+    annualSavings: null,
+    desc: "Full-featured, white-glove deployment for large enterprise sales organisations.",
+    popular: false,
+    features: [
+      { text: "Unlimited sales reps", included: true },
+      { text: "WhatsApp + Telegram + Web app + API", included: true },
+      { text: "Unlimited knowledge bases", included: true },
+      { text: "Custom AI personality & tone", included: true },
+      { text: "Advanced script personalisation", included: true },
+      { text: "Unlimited competitive battlecards", included: true },
+      { text: "Advanced analytics & reporting", included: true },
+      { text: "SSO / SAML + enterprise security", included: true },
+      { text: "Dedicated CSM + SLA support", included: true },
+    ],
+    cta: "Contact Sales",
+    ctaStyle: "outline",
+  },
+];
+
+const faqs = [
+  { q: "How does the 14-day pilot work?", a: "You get full access to your chosen plan for 14 days, no credit card required. We help you set up your knowledge base and get your first reps using it. If it's not delivering value, you pay nothing." },
+  { q: "How long does setup take?", a: "Most teams are live within 30 minutes. You upload your product information and collaterals via our admin portal, and Salesji starts working immediately." },
+  { q: "Can we update our knowledge base at any time?", a: "Absolutely. Sales managers can update pricing, objection responses, competitive positioning and collaterals at any time via the admin portal. Changes propagate to all reps instantly." },
+  { q: "Is our proprietary data secure?", a: "Yes. All data is encrypted at rest and in transit. Your knowledge base is private to your organisation and never used to train shared models. Enterprise plans include additional security controls." },
+  { q: "Do we need to install anything?", a: "No. Salesji runs as a WhatsApp or Telegram bot. Your reps add the Salesji number and start messaging immediately. No app downloads, no browser extensions required." },
+  { q: "What if we need more reps than the plan allows?", a: "You can upgrade between plans at any time, and the pricing difference is prorated. Enterprise plans offer unlimited users — contact our sales team for a custom quote." },
+];
+
+const comparisonData = [
+  { section: "Team & Usage" },
+  { feature: "Sales reps included", starter: "Up to 5", growth: "Up to 25", enterprise: "Unlimited" },
+  { feature: "Knowledge base items", starter: "500", growth: "6,000", enterprise: "Unlimited" },
+  { feature: "Monthly queries", starter: "2,000", growth: "20,000", enterprise: "Unlimited" },
+  { section: "Channels" },
+  { feature: "WhatsApp bot", starter: true, growth: true, enterprise: true },
+  { feature: "Telegram bot", starter: false, growth: true, enterprise: true },
+  { feature: "Web app chat", starter: true, growth: true, enterprise: true },
+  { feature: "REST API access", starter: false, growth: false, enterprise: true },
+  { section: "AI Features" },
+  { feature: "Objection handling", starter: true, growth: true, enterprise: true },
+  { feature: "Sales script generation", starter: "Basic", growth: "Personalised", enterprise: "Advanced + custom tone" },
+  { feature: "Personalisation by persona", starter: false, growth: true, enterprise: true },
+  { feature: "Competitive battlecards", starter: false, growth: "Up to 10", enterprise: "Unlimited" },
+  { feature: "Smart asset retrieval", starter: true, growth: true, enterprise: true },
+  { feature: "Custom AI personality", starter: false, growth: false, enterprise: true },
+  { section: "Management & Security" },
+  { feature: "Manager control centre", starter: true, growth: true, enterprise: true },
+  { feature: "Usage analytics", starter: false, growth: true, enterprise: "Advanced" },
+  { feature: "SSO / SAML", starter: false, growth: false, enterprise: true },
+  { feature: "Dedicated CSM", starter: false, growth: false, enterprise: true },
+  { feature: "SLA guarantee", starter: false, growth: false, enterprise: true },
+];
 
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
   const observerRef = useRef(null);
 
   useEffect(() => {
-    document.title = `Pricing — ${siteConfig.name} AI Sales Assistant`;
+    document.title = `Pricing — ${siteConfig.name}`;
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) entry.target.classList.add("visible");
+        entries.forEach((entry, i) => {
+          if (entry.isIntersecting) {
+            setTimeout(() => entry.target.classList.add("visible"), i * 80);
+            observerRef.current.unobserve(entry.target);
+          }
         });
       },
       { threshold: 0.1 }
     );
-    document.querySelectorAll(".fade-in").forEach((el) => {
-      observerRef.current.observe(el);
-    });
+    document.querySelectorAll(".fade-in").forEach((el) => observerRef.current.observe(el));
     return () => observerRef.current?.disconnect();
   }, []);
 
-
-  const plans = [
-    {
-      name: "Starter",
-      monthly: 49,
-      annual: 39,
-      desc: "For small teams getting started with AI sales support.",
-      features: [
-        { text: "5 sales reps", included: true },
-        { text: "WhatsApp + Web channels", included: true },
-        { text: "1 Knowledge Base (500 items)", included: true },
-        { text: "Objection handling", included: true },
-        { text: "Basic scripts", included: true },
-        { text: "Asset retrieval", included: true },
-        { text: "Telegram integration", included: false },
-        { text: "Competitive battlecards", included: false },
-        { text: "Usage analytics", included: false },
-      ],
-      popular: false,
-    },
-    {
-      name: "Growth",
-      monthly: 149,
-      annual: 119,
-      desc: "For scaling teams that need full AI sales power.",
-      features: [
-        { text: "25 sales reps", included: true },
-        { text: "WhatsApp + Telegram + Web", included: true },
-        { text: "3 Knowledge Bases (2,000 items each)", included: true },
-        { text: "Full playbooks", included: true },
-        { text: "Personalised scripts", included: true },
-        { text: "Smart search", included: true },
-        { text: "10 battlecards", included: true },
-        { text: "Usage analytics", included: true },
-        { text: "Custom AI personality", included: false },
-      ],
-      popular: true,
-    },
-    {
-      name: "Enterprise",
-      monthly: null,
-      annual: null,
-      desc: "Custom pricing for large organisations.",
-      features: [
-        { text: "Unlimited sales reps", included: true },
-        { text: "All channels", included: true },
-        { text: "Unlimited Knowledge Bases", included: true },
-        { text: "API access", included: true },
-        { text: "Custom AI personality", included: true },
-        { text: "SSO / SAML", included: true },
-        { text: "Dedicated CSM + SLA", included: true },
-        { text: "Advanced analytics", included: true },
-        { text: "Priority support", included: true },
-      ],
-      popular: false,
-    },
-  ];
-
-
-  const comparisonData = [
-    {
-      category: "Team & Usage",
-      rows: [
-        { feature: "Sales reps", starter: "5", growth: "25", enterprise: "Unlimited" },
-        { feature: "Knowledge Bases", starter: "1 (500 items)", growth: "3 (2,000 each)", enterprise: "Unlimited" },
-        { feature: "Messages/month", starter: "5,000", growth: "50,000", enterprise: "Unlimited" },
-      ],
-    },
-    {
-      category: "Channels",
-      rows: [
-        { feature: "WhatsApp", starter: "✓", growth: "✓", enterprise: "✓" },
-        { feature: "Telegram", starter: "—", growth: "✓", enterprise: "✓" },
-        { feature: "Web App", starter: "✓", growth: "✓", enterprise: "✓" },
-      ],
-    },
-    {
-      category: "AI Features",
-      rows: [
-        { feature: "Objection handling", starter: "✓", growth: "✓", enterprise: "✓" },
-        { feature: "Personalised scripts", starter: "Basic", growth: "Advanced", enterprise: "Custom" },
-        { feature: "Battlecards", starter: "—", growth: "10", enterprise: "Unlimited" },
-        { feature: "Smart asset retrieval", starter: "✓", growth: "✓", enterprise: "✓" },
-        { feature: "Custom AI personality", starter: "—", growth: "—", enterprise: "✓" },
-      ],
-    },
-    {
-      category: "Management & Security",
-      rows: [
-        { feature: "Manager control centre", starter: "✓", growth: "✓", enterprise: "✓" },
-        { feature: "Usage analytics", starter: "—", growth: "✓", enterprise: "Advanced" },
-        { feature: "SSO / SAML", starter: "—", growth: "—", enterprise: "✓" },
-        { feature: "Dedicated CSM", starter: "—", growth: "—", enterprise: "✓" },
-        { feature: "SLA", starter: "—", growth: "—", enterprise: "99.9%" },
-      ],
-    },
-  ];
-
-
-  const faqs = [
-    { q: "Is there a free trial?", a: "Yes! Every plan comes with a 14-day free pilot. No credit card required, and you can cancel anytime." },
-    { q: "How long does setup take?", a: "Most teams are up and running in under 30 minutes. Our onboarding team will help configure your knowledge base and channels." },
-    { q: "How do I update the knowledge base?", a: "Managers can upload, edit, and remove documents from the control centre at any time. Changes are reflected instantly for all reps." },
-    { q: "How is my data secured?", a: "We use enterprise-grade encryption at rest and in transit, SOC 2 compliance, and offer SSO/SAML on Enterprise plans." },
-    { q: "Do my reps need to install anything?", a: "No. Salesji works through WhatsApp, Telegram, and a web app — no downloads or installations needed." },
-    { q: "What if I need more reps than my plan allows?", a: "You can upgrade your plan at any time, or contact us for custom Enterprise pricing to fit your team size." },
-  ];
+  const renderCell = (val) => {
+    if (val === true) return <span className="text-[#1D4ED8] text-lg">✓</span>;
+    if (val === false) return <span className="text-[#CBD5E1] text-lg">—</span>;
+    return <span className="text-sm text-[#334155]">{val}</span>;
+  };
 
   return (
-    <div className="bg-white text-grey-800 min-h-screen font-body">
-      <Navbar />
-
+    <div className="bg-white min-h-screen" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Hero */}
-      <section className="pt-40 pb-24 bg-gradient-to-br from-navy via-[#1a2744] to-[#0f2040] text-white text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(29,78,216,0.15),transparent_50%)] pointer-events-none" />
-        <div className="max-w-[1200px] mx-auto px-6 relative z-10">
-          <span className="inline-block bg-primary-bright/15 text-primary-bright px-5 py-2 rounded-full text-xs font-semibold tracking-wide uppercase mb-6">
-            Pricing
-          </span>
-          <h1 className="font-display text-4xl md:text-6xl font-extrabold mb-6 max-w-[800px] mx-auto leading-tight">
-            Simple pricing for teams of{" "}
-            <span className="bg-gradient-to-r from-primary-bright to-accent bg-clip-text text-transparent">
-              every size.
-            </span>
-          </h1>
-
-
-          {/* Billing Toggle */}
-          <div className="inline-flex items-center gap-1 bg-white/10 p-1 rounded-full border border-white/10 mb-4">
-            <button
-              onClick={() => setIsAnnual(false)}
-              className={`px-6 py-2.5 rounded-full text-sm font-semibold transition-all ${
-                !isAnnual ? "bg-white text-navy" : "text-grey-300 hover:text-white"
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setIsAnnual(true)}
-              className={`px-6 py-2.5 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${
-                isAnnual ? "bg-white text-navy" : "text-grey-300 hover:text-white"
-              }`}
-            >
-              Annual
-              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded uppercase">
-                Save 20%
-              </span>
-            </button>
+      <section className="pt-[140px] pb-20 bg-gradient-to-br from-[#EFF6FF] via-[#F0F9FF] to-white text-center px-6">
+        <p className="text-xs font-bold tracking-[0.1em] uppercase text-[#1D4ED8] mb-3.5">Pricing</p>
+        <h1 className="font-display text-[clamp(2rem,4vw,3rem)] font-extrabold leading-[1.12] tracking-tight text-[#0A1628] mb-4">
+          Simple pricing for<br />
+          <span className="bg-gradient-to-r from-[#1D4ED8] to-[#06B6D4] bg-clip-text text-transparent">teams of every size.</span>
+        </h1>
+        <p className="text-lg text-[#64748B] max-w-[560px] mx-auto mb-6 leading-relaxed font-light">
+          No hidden fees. No per-message charges. One flat monthly price per plan — and your whole team benefits.
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <div className="inline-flex bg-[#F1F5F9] rounded-full p-1">
+            <button onClick={() => setIsAnnual(false)} className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${!isAnnual ? "bg-white text-[#0A1628] shadow-sm" : "text-[#64748B]"}`}>Monthly</button>
+            <button onClick={() => setIsAnnual(true)} className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${isAnnual ? "bg-white text-[#0A1628] shadow-sm" : "text-[#64748B]"}`}>Annual</button>
           </div>
+          <span className="inline-flex items-center gap-1.5 bg-[#F0FDF4] text-[#16A34A] text-xs font-bold px-3 py-1 rounded-full">🎉 Save 20%</span>
         </div>
       </section>
 
-
       {/* Pricing Cards */}
-      <section className="py-20 -mt-16">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <section className="py-20 px-6">
+        <div className="max-w-[1200px] mx-auto">
+          <div className="fade-in grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
             {plans.map((plan, idx) => (
-              <div
-                key={idx}
-                className={`fade-in relative bg-white rounded-2xl p-8 border transition-all hover:-translate-y-1 hover:shadow-lg ${
-                  plan.popular
-                    ? "border-primary border-2 shadow-xl scale-[1.02] z-10"
-                    : "border-grey-200"
-                }`}
-              >
+              <div key={idx} className={`relative bg-white border rounded-[20px] p-9 transition-all hover:shadow-[0_16px_48px_rgba(10,22,40,0.16)] hover:-translate-y-1 ${plan.popular ? "border-[#1D4ED8] md:scale-[1.03]" : "border-[#F1F5F9]"}`}>
                 {plan.popular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-primary text-white px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
-                    Most Popular
-                  </div>
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#1D4ED8] to-[#06B6D4] text-white text-[0.75rem] font-bold px-4 py-1 rounded-full uppercase tracking-wider whitespace-nowrap">Most Popular</div>
                 )}
-                <h3 className="font-display text-xl font-bold text-navy mb-2">{plan.name}</h3>
-                <p className="text-sm text-grey-500 mb-6 h-10">{plan.desc}</p>
-                <div className="flex items-baseline gap-1 mb-8">
-                  {plan.monthly !== null ? (
-                    <>
-                      <span className="font-display text-5xl font-extrabold text-navy">
-                        ${isAnnual ? plan.annual : plan.monthly}
-                      </span>
-                      <span className="text-grey-500 font-medium">/mo</span>
-                    </>
+                <p className={`text-xs font-bold tracking-[0.08em] uppercase mb-2 ${plan.popular ? "text-[#1D4ED8]" : "text-[#64748B]"}`}>{plan.name}</p>
+                <div className="mb-2">
+                  {plan.monthly ? (
+                    <span className="font-display text-5xl font-extrabold text-[#0A1628] tracking-tight">
+                      <sup className="text-xl align-super">$</sup>{isAnnual ? plan.annual : plan.monthly}
+                      <span className="text-[0.85rem] font-normal text-[#64748B]"> / month</span>
+                    </span>
                   ) : (
-                    <span className="font-display text-3xl font-extrabold text-navy">Custom</span>
+                    <span className="font-display text-[2.2rem] font-extrabold text-[#0A1628]">Custom</span>
                   )}
                 </div>
+                {plan.annualSavings && (
+                  <p className={`text-xs font-semibold text-[#16A34A] mb-4 ${isAnnual ? "visible" : "invisible"}`}>
+                    Billed annually — save {plan.annualSavings}
+                  </p>
+                )}
+                {!plan.annualSavings && <p className="text-xs invisible mb-4">placeholder</p>}
+                <p className="text-sm text-[#64748B] leading-relaxed mb-6 pb-6 border-b border-[#F1F5F9]">{plan.desc}</p>
+                <ul className="flex flex-col gap-3 mb-7">
+                  {plan.features.map((f, i) => (
+                    <li key={i} className={`flex items-start gap-2.5 text-sm ${f.included ? "text-[#334155]" : "text-[#CBD5E1]"}`}>
+                      <span className={`w-[18px] h-[18px] rounded-full flex items-center justify-center text-[0.65rem] font-bold shrink-0 mt-0.5 ${f.included ? "bg-[#EFF6FF] text-[#1D4ED8]" : "bg-[#F1F5F9] text-[#CBD5E1]"}`}>
+                        {f.included ? "✓" : "✗"}
+                      </span>
+                      {f.text}
+                    </li>
+                  ))}
+                </ul>
                 <Link
-                  href="/contact"
-                  className={`block w-full text-center py-3.5 rounded-lg font-semibold transition-all mb-8 ${
-                    plan.popular
-                      ? "bg-primary text-white hover:bg-primary-bright"
-                      : "bg-grey-100 text-navy hover:bg-grey-200"
+                  href={`${MARKETING_URL}/contact.html`}
+                  className={`block w-full text-center py-3.5 rounded-[10px] text-[0.95rem] font-semibold transition-all ${
+                    plan.ctaStyle === "primary"
+                      ? "bg-[#1D4ED8] text-white shadow-[0_3px_12px_rgba(29,78,216,0.3)] hover:bg-[#1a44b8] hover:shadow-[0_6px_20px_rgba(29,78,216,0.4)] hover:-translate-y-0.5"
+                      : "bg-white text-[#0A1628] border-[1.5px] border-[#CBD5E1] hover:border-[#1D4ED8] hover:text-[#1D4ED8]"
                   }`}
                 >
-                  {plan.monthly !== null ? "Start Free Pilot" : "Contact Sales"}
+                  {plan.cta} →
                 </Link>
-                <div className="space-y-3">
-                  {plan.features.map((feat, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      {feat.included ? (
-                        <svg className="w-5 h-5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5 text-grey-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      )}
-                      <span className={`text-sm ${feat.included ? "text-grey-700" : "text-grey-400"}`}>
-                        {feat.text}
-                      </span>
-                    </div>
-                  ))}
-                </div>
               </div>
             ))}
           </div>
-          <p className="text-center text-sm text-grey-500 mt-10">
-            14-day free pilot &bull; No credit card required &bull; Cancel anytime
+          <p className="text-center mt-8 text-sm text-[#64748B]">
+            All plans include a <strong>14-day free pilot</strong> · No credit card required · Cancel anytime
           </p>
         </div>
       </section>
 
-
       {/* Comparison Table */}
-      <section className="py-20 bg-grey-50">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <h2 className="font-display text-3xl font-bold text-navy text-center mb-14">Compare plans in detail</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-grey-200">
-                  <th className="text-left py-4 px-4 font-semibold text-grey-700 w-1/4">Feature</th>
-                  <th className="text-center py-4 px-4 font-semibold text-grey-700">Starter</th>
-                  <th className="text-center py-4 px-4 font-semibold text-primary">Growth</th>
-                  <th className="text-center py-4 px-4 font-semibold text-grey-700">Enterprise</th>
+      <section className="py-20 px-6 bg-[#F8FAFC]">
+        <div className="max-w-[1200px] mx-auto">
+          <div className="text-center mb-12 fade-in">
+            <p className="text-xs font-bold tracking-[0.1em] uppercase text-[#1D4ED8] mb-3">Detailed Comparison</p>
+            <h2 className="font-display text-[clamp(1.6rem,3vw,2.2rem)] font-extrabold text-[#0A1628]">What&apos;s included in each plan.</h2>
+          </div>
+          <div className="fade-in overflow-x-auto">
+            <table className="w-full border-collapse bg-white rounded-2xl overflow-hidden shadow-[0_4px_24px_rgba(10,22,40,0.10)] min-w-[600px]">
+              <thead className="bg-[#0A1628]">
+                <tr>
+                  <th className="px-6 py-5 text-left font-display font-bold text-sm text-white">Feature</th>
+                  <th className="px-6 py-5 text-center font-display font-bold text-sm text-white">Starter</th>
+                  <th className="px-6 py-5 text-center font-display font-bold text-sm text-white">Growth</th>
+                  <th className="px-6 py-5 text-center font-display font-bold text-sm text-white">Enterprise</th>
                 </tr>
               </thead>
               <tbody>
-                {comparisonData.map((section, sIdx) => (
-                  <Fragment key={sIdx}>
-                    <tr>
-                      <td colSpan={4} className="pt-8 pb-3 px-4 font-display font-bold text-navy text-base">
-                        {section.category}
-                      </td>
-                    </tr>
-                    {section.rows.map((row, rIdx) => (
-                      <tr key={rIdx} className="border-b border-grey-100">
-                        <td className="py-3 px-4 text-grey-700">{row.feature}</td>
-                        <td className="py-3 px-4 text-center text-grey-600">{row.starter}</td>
-                        <td className="py-3 px-4 text-center text-grey-600 font-medium">{row.growth}</td>
-                        <td className="py-3 px-4 text-center text-grey-600">{row.enterprise}</td>
+                {comparisonData.map((row, idx) => {
+                  if (row.section) {
+                    return (
+                      <tr key={idx} className="bg-[#F8FAFC]">
+                        <td colSpan={4} className="px-6 py-3 font-display font-bold text-xs text-[#64748B] uppercase tracking-wider">{row.section}</td>
                       </tr>
-                    ))}
-                  </Fragment>
-                ))}
+                    );
+                  }
+                  return (
+                    <tr key={idx} className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC] transition-colors">
+                      <td className="px-6 py-3.5 text-sm text-[#334155]">{row.feature}</td>
+                      <td className="px-6 py-3.5 text-center">{renderCell(row.starter)}</td>
+                      <td className="px-6 py-3.5 text-center">{renderCell(row.growth)}</td>
+                      <td className="px-6 py-3.5 text-center">{renderCell(row.enterprise)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       </section>
 
-
       {/* FAQ */}
-      <section className="py-20">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <h2 className="font-display text-3xl font-bold text-navy text-center mb-14">Frequently asked questions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-[900px] mx-auto">
+      <section className="py-20 px-6">
+        <div className="max-w-[1200px] mx-auto">
+          <div className="text-center mb-12 fade-in">
+            <p className="text-xs font-bold tracking-[0.1em] uppercase text-[#1D4ED8] mb-3">Common Questions</p>
+            <h2 className="font-display text-[clamp(1.6rem,3vw,2.2rem)] font-extrabold text-[#0A1628]">Frequently asked questions.</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {faqs.map((faq, idx) => (
-              <div key={idx} className="fade-in">
-                <h3 className="font-display text-base font-semibold text-navy mb-2">{faq.q}</h3>
-                <p className="text-sm text-grey-500 leading-relaxed">{faq.a}</p>
+              <div key={idx} className="fade-in bg-[#F8FAFC] border border-[#F1F5F9] rounded-xl p-6">
+                <h3 className="font-display text-[0.95rem] font-bold text-[#0A1628] mb-2.5">{faq.q}</h3>
+                <p className="text-sm text-[#64748B] leading-relaxed">{faq.a}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Banner */}
-      <section className="py-24 bg-gradient-to-r from-primary to-primary-bright text-white text-center">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">Not sure which plan? Let&apos;s talk.</h2>
-          <p className="text-lg opacity-90 mb-10">Our team will help you find the perfect fit for your sales organisation.</p>
-          <Link
-            href="/contact"
-            className="inline-flex items-center justify-center bg-white text-primary px-8 py-3.5 rounded-lg text-base font-semibold hover:-translate-y-0.5 hover:shadow-lg transition-all"
-          >
-            Book a Demo
-          </Link>
-          <Link
-            href="/contact"
-            className="inline-flex items-center justify-center bg-transparent text-white border-2 border-white/40 px-8 py-3.5 rounded-lg text-base font-semibold hover:border-white hover:bg-white/10 transition-all ml-4"
-          >
-            Talk to Sales
-          </Link>
+      {/* CTA */}
+      <section className="py-24 px-6 bg-gradient-to-r from-[#1D4ED8] via-[#1e40af] to-[#0A1628] relative overflow-hidden">
+        <div className="absolute top-[-150px] right-[-150px] w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(255,255,255,0.08)_0%,transparent_70%)]" />
+        <div className="max-w-[720px] mx-auto text-center relative z-10">
+          <h2 className="font-display text-[clamp(1.6rem,3vw,2.2rem)] font-extrabold text-white mb-4">Not sure which plan?<br />Let&apos;s talk.</h2>
+          <p className="text-lg text-white/75 mb-9">Our team will assess your team size, use cases and goals, and recommend the right plan.</p>
+          <div className="flex items-center justify-center gap-4 flex-wrap">
+            <a href={`${MARKETING_URL}/contact.html`} className="inline-flex items-center gap-2 bg-white text-[#1D4ED8] px-8 py-3.5 rounded-[11px] text-base font-bold shadow-[0_4px_16px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.3)] transition-all">Book a Free Demo →</a>
+            <a href={`${MARKETING_URL}/contact.html`} className="inline-flex items-center gap-2 bg-transparent text-white border-[1.5px] border-white/40 px-7 py-3.5 rounded-[11px] text-base font-semibold hover:border-white hover:bg-white/10 transition-all">Talk to Sales</a>
+          </div>
         </div>
       </section>
 
-
       {/* Footer */}
-      <footer className="bg-navy text-grey-300 pt-20 pb-10">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-14">
-            <div className="md:col-span-1">
-              <Link href="/" className="font-display font-extrabold text-xl text-white flex items-center gap-2 mb-4">
-                <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">SJ</span> Salesji
-              </Link>
-              <p className="text-sm text-grey-400 leading-relaxed max-w-[300px]">
-                AI-powered sales enablement for modern teams. Personalised scripts, real-time coaching, and smart asset retrieval.
-              </p>
+      <footer className="bg-[#0A1628] text-white/60 py-16 px-6">
+        <div className="max-w-[1200px] mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+            <div>
+              <a href={MARKETING_URL} className="flex items-center gap-2.5 mb-3.5">
+                <div className="w-8 h-8 bg-[#1D4ED8] rounded-lg flex items-center justify-center font-display font-extrabold text-white text-xs">SJ</div>
+                <span className="font-display font-extrabold text-lg text-white tracking-tight">Sales<span className="text-[#3B82F6]">ji</span></span>
+              </a>
+              <p className="text-sm leading-relaxed max-w-[260px]">AI-powered sales enablement for enterprise and SME teams.</p>
             </div>
             <div>
-              <h4 className="text-xs uppercase tracking-widest text-grey-400 mb-5 font-semibold">Product</h4>
-              <Link href="/features" className="block text-sm text-grey-300 py-1.5 hover:text-white transition-colors">Features</Link>
-              <Link href="/pricing" className="block text-sm text-grey-300 py-1.5 hover:text-white transition-colors">Pricing</Link>
-              <Link href="/contact" className="block text-sm text-grey-300 py-1.5 hover:text-white transition-colors">Book a Demo</Link>
+              <h4 className="font-display font-bold text-sm text-white mb-4">Product</h4>
+              <ul className="flex flex-col gap-2.5"><li><a href={`${MARKETING_URL}/features.html`} className="text-sm text-white/50 hover:text-white transition-colors">Features</a></li><li><Link href="/pricing" className="text-sm text-white/50 hover:text-white transition-colors">Pricing</Link></li><li><a href={`${MARKETING_URL}/contact.html`} className="text-sm text-white/50 hover:text-white transition-colors">Book a Demo</a></li></ul>
             </div>
             <div>
-              <h4 className="text-xs uppercase tracking-widest text-grey-400 mb-5 font-semibold">Company</h4>
-              <Link href="/about" className="block text-sm text-grey-300 py-1.5 hover:text-white transition-colors">About</Link>
-              <Link href="/contact" className="block text-sm text-grey-300 py-1.5 hover:text-white transition-colors">Contact</Link>
+              <h4 className="font-display font-bold text-sm text-white mb-4">Company</h4>
+              <ul className="flex flex-col gap-2.5"><li><a href={MARKETING_URL} className="text-sm text-white/50 hover:text-white transition-colors">About</a></li><li><a href={`${MARKETING_URL}/contact.html`} className="text-sm text-white/50 hover:text-white transition-colors">Contact</a></li></ul>
             </div>
             <div>
-              <h4 className="text-xs uppercase tracking-widest text-grey-400 mb-5 font-semibold">Legal</h4>
-              <Link href="/privacy" className="block text-sm text-grey-300 py-1.5 hover:text-white transition-colors">Privacy Policy</Link>
-              <Link href="/terms" className="block text-sm text-grey-300 py-1.5 hover:text-white transition-colors">Terms of Service</Link>
+              <h4 className="font-display font-bold text-sm text-white mb-4">Legal</h4>
+              <ul className="flex flex-col gap-2.5"><li><Link href="/privacy" className="text-sm text-white/50 hover:text-white transition-colors">Privacy Policy</Link></li><li><Link href="/terms" className="text-sm text-white/50 hover:text-white transition-colors">Terms of Service</Link></li><li><Link href="/refunds" className="text-sm text-white/50 hover:text-white transition-colors">Refund Policy</Link></li></ul>
             </div>
           </div>
-          <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-grey-500">
-              &copy; 2025 Salesji. All rights reserved. A venture of{" "}
-              <a href="https://essenn.associates" target="_blank" rel="noopener noreferrer" className="text-accent underline">ESS ENN Associates</a>
-            </p>
-            <div className="flex gap-4">
-              <a href="mailto:hello@salesji.com" className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-grey-400 hover:bg-primary hover:text-white transition-all text-sm">✉</a>
-              <a href="https://linkedin.com/company/salesji" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-grey-400 hover:bg-primary hover:text-white transition-all text-xs font-bold">in</a>
-            </div>
+          <div className="border-t border-white/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs">
+            <p>&copy; 2025 Salesji. All rights reserved. · A venture of <a href="https://essenn.associates" target="_blank" rel="noopener noreferrer" className="text-white/50 hover:text-white transition-colors">ESS ENN Associates</a></p>
+            <div className="flex gap-4"><a href="#" className="text-white/40 hover:text-white transition-colors">LinkedIn</a><a href="#" className="text-white/40 hover:text-white transition-colors">Twitter</a></div>
           </div>
         </div>
       </footer>
 
       <style jsx>{`
-        .fade-in {
-          opacity: 0;
-          transform: translateY(30px);
-          transition: all 0.6s ease;
-        }
-        .fade-in.visible {
-          opacity: 1;
-          transform: translateY(0);
-        }
+        .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
+        .fade-in.visible { opacity: 1; transform: translateY(0); }
       `}</style>
     </div>
   );
