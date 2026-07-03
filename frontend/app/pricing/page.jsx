@@ -328,7 +328,7 @@ export default function PricingPage() {
         <div className="max-w-[1200px] mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-14">
             <div className="md:col-span-1">
-              <Link href="/" className="font-display font-extrabold text-xl text-white flex items-center gap-2 mb-4">
+              <Link href="https://salesji.com" className="font-display font-extrabold text-xl text-white flex items-center gap-2 mb-4">
                 <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">SJ</span> Salesji
               </Link>
               <p className="text-sm text-grey-400 leading-relaxed max-w-[300px]">
