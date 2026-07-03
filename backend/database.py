@@ -2,6 +2,7 @@ import logging
 from supabase import create_client, Client
 from config import SUPABASE_URL, SUPABASE_KEY
 from embedder import get_embedding
+from cache import settings_cache, files_cache, state_cache
 import httpx
 import logging
 
@@ -269,22 +270,34 @@ def remove_ingested_file(filename: str, google_id: str):
         supabase.table(TblFiles.TABLE).delete().eq(TblFiles.ID, file_id).execute()
         logger.info(f"Successfully deleted {filename} from file metadata")
         
+        # PERFORMANCE: Invalidate file caches for this admin
+        files_cache.invalidate(f"filenames:{google_id}")
+        files_cache.invalidate(f"tenant_files:{google_id}")
+        
         return True
     except Exception as e:
         logger.error(f"Failed to delete file from db: {e}")
         return False
 
 def get_bot_settings(google_id: str):
-    """Get bot settings for admin"""
+    """Get bot settings for admin — CACHED (120s TTL)"""
+    cache_key = f"settings:{google_id}"
+    cached = settings_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
     try:
         res = supabase.table(TblBotSettings.TABLE).select("*").eq(TblBotSettings.CREATED_BY, google_id).execute()
         if res.data:
+            settings_cache.set(cache_key, res.data[0])
             return res.data[0]
-        return {
+        defaults = {
             TblBotSettings.STRICT_MODE: True, 
             TblBotSettings.TEMPERATURE: 0.2, 
             TblBotSettings.MAINTENANCE_MODE: False
         }
+        settings_cache.set(cache_key, defaults)
+        return defaults
     except Exception:
         return {
             TblBotSettings.STRICT_MODE: True, 
@@ -313,10 +326,17 @@ def save_onboarding_lead(data: dict):
         logger.error(f"Lead save error: {e}")
 
 def get_active_filenames(google_id: str):
-    """Get all active filenames for admin"""
+    """Get all active filenames for admin — CACHED (60s TTL)"""
+    cache_key = f"filenames:{google_id}"
+    cached = files_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
     try:
         res = supabase.table(TblFiles.TABLE).select(TblFiles.FILENAME).eq(TblFiles.CREATED_BY, google_id).execute()
-        return [row[TblFiles.FILENAME] for row in res.data] if res.data else []
+        result = [row[TblFiles.FILENAME] for row in res.data] if res.data else []
+        files_cache.set(cache_key, result)
+        return result
     except Exception as e:
         logger.error(f"Error fetching active files: {e}")
         return []
