@@ -281,7 +281,12 @@ CREATE INDEX idx_tokens_admin ON invite_tokens(admin_id);
 
 -- ═══════════════════════════════════════════════════════
 -- RLS POLICIES
+-- All tables have RLS enabled. The Python backend uses
+-- service_role key (bypasses RLS). These policies protect
+-- the frontend (anon key) and direct API access only.
 -- ═══════════════════════════════════════════════════════
+
+-- Enable RLS on ALL tables
 ALTER TABLE invite_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bot_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_analytics ENABLE ROW LEVEL SECURITY;
@@ -290,15 +295,53 @@ ALTER TABLE onboarding_leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE test_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_states ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ingested_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE file_chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE embeddings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE condensed_knowledge_cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE knowledge_card_chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE asymmetric_anchors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE condensation_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE condensation_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE embedding_metrics ENABLE ROW LEVEL SECURITY;
 
+-- ─── Core tables: admin_id scoped ───
 CREATE POLICY "tokens_owner_policy" ON invite_tokens FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
 CREATE POLICY "settings_owner_policy" ON bot_settings FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
 CREATE POLICY "analytics_owner_policy" ON chat_analytics FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
-CREATE POLICY "Allow Admins to Ban Users" ON authorized_users FOR UPDATE USING (true);
-CREATE POLICY "Allow all operations for authenticated bot" ON onboarding_leads FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all operations for authenticated bot" ON test_results FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "feedback_owner_policy" ON user_feedback FOR SELECT USING (auth.uid() = admin_id);
-CREATE POLICY "Allow all operations for authenticated bot" ON user_states FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "feedback_owner_policy" ON user_feedback FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "onboarding_owner_policy" ON onboarding_leads FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "test_results_owner_policy" ON test_results FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+
+-- ─── authorized_users: per-operation policies ───
+CREATE POLICY "users_select_own" ON authorized_users FOR SELECT USING (auth.uid() = admin_id);
+CREATE POLICY "users_insert_own" ON authorized_users FOR INSERT WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "users_update_own" ON authorized_users FOR UPDATE USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "users_delete_own" ON authorized_users FOR DELETE USING (auth.uid() = admin_id);
+
+-- ─── user_states: scoped through authorized_users relationship ───
+CREATE POLICY "user_states_owner_policy" ON user_states FOR ALL USING (
+    EXISTS (SELECT 1 FROM authorized_users au WHERE au.telegram_id = user_states.telegram_id AND au.admin_id = auth.uid())
+) WITH CHECK (
+    EXISTS (SELECT 1 FROM authorized_users au WHERE au.telegram_id = user_states.telegram_id AND au.admin_id = auth.uid())
+);
+
+-- ─── Knowledge pipeline tables: admin_id scoped ───
+CREATE POLICY "files_owner_policy" ON ingested_files FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "chunks_owner_policy" ON file_chunks FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "embeddings_owner_policy" ON embeddings FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "cards_owner_policy" ON condensed_knowledge_cards FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "anchors_owner_policy" ON asymmetric_anchors FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "condensation_logs_owner_policy" ON condensation_logs FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "condensation_metrics_owner_policy" ON condensation_metrics FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+CREATE POLICY "embedding_metrics_owner_policy" ON embedding_metrics FOR ALL USING (auth.uid() = admin_id) WITH CHECK (auth.uid() = admin_id);
+
+-- ─── knowledge_card_chunks: scoped through card ownership ───
+CREATE POLICY "card_chunks_owner_policy" ON knowledge_card_chunks FOR ALL USING (
+    EXISTS (SELECT 1 FROM condensed_knowledge_cards ckc WHERE ckc.id = knowledge_card_chunks.card_id AND ckc.admin_id = auth.uid())
+) WITH CHECK (
+    EXISTS (SELECT 1 FROM condensed_knowledge_cards ckc WHERE ckc.id = knowledge_card_chunks.card_id AND ckc.admin_id = auth.uid())
+);
 
 -- ═══════════════════════════════════════════════════════
 -- MATCH EMBEDDINGS FUNCTION (Vector Search)
@@ -310,7 +353,9 @@ CREATE OR REPLACE FUNCTION match_embeddings(
     p_admin_id uuid DEFAULT NULL
 )
 RETURNS TABLE (id bigint, chunk_id bigint, content text, file_name text, similarity float)
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
 BEGIN
     RETURN QUERY
     SELECT fc.id, fc.id as chunk_id, fc.content, inf.filename as file_name,
