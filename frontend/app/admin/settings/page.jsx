@@ -1,36 +1,34 @@
 import { supabaseAdmin } from "../../lib/supabaseAdmin";
-import MaintenanceSwitch from "../../admin/components/MaintainenceSwitch";
 import { Settings } from "lucide-react";
+import SettingsPanel from "./SettingsPanel";
 
-export default async function BotSettingsPage() {
-  // Fetch the master setting row
+export default async function AdminSettingsPage() {
+  // Fetch all bot_settings
   const { data: settings } = await supabaseAdmin
     .from("bot_settings")
-    .select("*")
-    .eq("id", 1)
-    .single();
+    .select("admin_id, maintenance_mode, strict_knowledge_mode, temperature, updated_at")
+    .order("updated_at", { ascending: false });
 
-  // Default to false if the database row hasn't been created yet
-  const isMaintenance = settings?.maintenance_mode || false;
+  // Determine global maintenance status (all tenants in maintenance = global is on)
+  const allInMaintenance =
+    settings && settings.length > 0 && settings.every((s) => s.maintenance_mode);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center gap-4 border-b border-zinc-200 pb-6">
-        <div className="p-3 bg-black text-white rounded-xl shadow-lg shrink-0">
-          <Settings size={28} />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-black tracking-tight">
-            System Core
-          </h1>
-          <p className="text-zinc-500 text-sm font-medium mt-1">
-            Global configuration and emergency controls.
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-white tracking-tight">
+          Settings
+        </h1>
+        <p className="text-zinc-500 text-sm mt-1">
+          Global system configuration, maintenance controls, and data management.
+        </p>
       </div>
 
-      {/* The Master Control UI */}
-      <MaintenanceSwitch initialStatus={isMaintenance} />
+      <SettingsPanel
+        tenantSettings={settings || []}
+        globalMaintenance={allInMaintenance}
+      />
     </div>
   );
 }

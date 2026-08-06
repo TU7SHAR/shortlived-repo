@@ -5,12 +5,23 @@ export default function proxy(request) {
 
   // 1. Admin Security Check
   if (pathname.startsWith("/admin")) {
+    // Allow unauthenticated access to the admin login page
+    if (pathname === "/admin/login") {
+      // If already authenticated, redirect to admin dashboard
+      const adminCookie = request.cookies.get("super-admin-auth-token");
+      if (adminCookie?.value === process.env.SUPER_ADMIN_SECRET) {
+        return NextResponse.redirect(new URL("/admin", request.url));
+      }
+      return NextResponse.next();
+    }
+
+    // All other /admin/* routes require authentication
     const adminCookie = request.cookies.get("super-admin-auth-token");
     const isAuthenticatedAdmin =
       adminCookie?.value === process.env.SUPER_ADMIN_SECRET;
 
     if (!isAuthenticatedAdmin) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL("/admin/login", request.url));
     }
     return NextResponse.next();
   }

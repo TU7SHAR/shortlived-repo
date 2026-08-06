@@ -1,320 +1,346 @@
 import { supabaseAdmin } from "../lib/supabaseAdmin";
-import { Users, KeyRound, Ticket, ShieldCheck, Activity } from "lucide-react";
-import DashboardChart from "./components/DashboardChart";
-import DateFilter from "./components/DateFilter";
-import TablePagination from "./components/TablePagination";
+import {
+  Users,
+  KeyRound,
+  Database,
+  MessageSquare,
+  TrendingUp,
+  Activity,
+  Building2,
+  Clock,
+} from "lucide-react";
 
-export default async function AdminDashboard({ searchParams }) {
-  const params = await searchParams;
-
-  let startDate, endDate;
-  let chartTitle = "New Users";
-
-  if (params.start && params.end) {
-    startDate = new Date(params.start);
-    endDate = new Date(params.end);
-    endDate.setHours(23, 59, 59, 999);
-    chartTitle = `New Users (${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()})`;
-  } else {
-    const days = parseInt(params.days || "7");
-    endDate = new Date();
-    startDate = new Date();
-    startDate.setDate(endDate.getDate() - days);
-    chartTitle = `New Users (Last ${days} Days)`;
-  }
-
-  const startIso = startDate.toISOString();
-  const endIso = endDate.toISOString();
-
-  const page = parseInt(params.page || "1");
-  const ITEMS_PER_PAGE = 5;
-  const from = (page - 1) * ITEMS_PER_PAGE;
-  const to = from + ITEMS_PER_PAGE - 1;
-
+export default async function AdminDashboard() {
+  // Fetch all stats in parallel
   const [
     { count: totalUsers },
+    { count: totalBannedUsers },
     { data: tokensData },
-    { data: paginatedUsers, count: totalUsersCount },
-    { data: paginatedTokens, count: totalTokensCount },
-    { data: graphRawData },
+    { count: totalFiles },
+    { count: totalChats },
+    { data: recentUsers },
+    { data: recentChats },
+    { data: settingsData },
+    { data: auditLogs },
   ] = await Promise.all([
     supabaseAdmin
       .from("authorized_users")
       .select("*", { count: "exact", head: true }),
-    supabaseAdmin.from("invite_tokens").select("id, is_used"),
     supabaseAdmin
       .from("authorized_users")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to),
+      .select("*", { count: "exact", head: true })
+      .eq("is_banned", true),
+    supabaseAdmin.from("invite_tokens").select("id, is_used, is_revoked, admin_id, created_at"),
     supabaseAdmin
-      .from("invite_tokens")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to),
+      .from("ingested_files")
+      .select("*", { count: "exact", head: true }),
+    supabaseAdmin
+      .from("chat_analytics")
+      .select("*", { count: "exact", head: true }),
     supabaseAdmin
       .from("authorized_users")
-      .select("created_at")
-      .gte("created_at", startIso)
-      .lte("created_at", endIso),
+      .select("telegram_id, username, created_at, is_banned")
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabaseAdmin
+      .from("chat_analytics")
+      .select("id, telegram_id, user_query, mode, created_at")
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabaseAdmin.from("bot_settings").select("admin_id, maintenance_mode"),
+    supabaseAdmin
+      .from("super_admin_audit_logs")
+      .select("action, entity_type, performed_at")
+      .order("performed_at", { ascending: false })
+      .limit(5),
   ]);
 
   const totalTokens = tokensData?.length || 0;
   const usedTokens = tokensData?.filter((t) => t.is_used).length || 0;
-  const activeTokens = totalTokens - usedTokens;
-  const usagePercentage =
-    totalTokens > 0 ? Math.round((usedTokens / totalTokens) * 100) : 0;
+  const revokedTokens = tokensData?.filter((t) => t.is_revoked).length || 0;
+  const availableTokens = totalTokens - usedTokens - revokedTokens;
 
-  const timeDiff = endDate.getTime() - startDate.getTime();
-  const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
+  // Tenant count (unique admin_ids from tokens)
+  const uniqueAdmins = new Set(tokensData?.map((t) => t.admin_id).filter(Boolean));
+  const totalTenants = uniqueAdmins.size;
 
-  const timelineDays = [...Array(totalDays > 0 ? totalDays : 1)]
-    .map((_, i) => {
-      const d = new Date(endDate);
-      d.setDate(d.getDate() - i);
-      return d.toISOString().split("T")[0];
-    })
-    .reverse();
+  // Maintenance status
+  const tenantsInMaintenance = settingsData?.filter((s) => s.maintenance_mode).length || 0;
 
-  const chartData = timelineDays.map((date) => {
-    const usersOnDate =
-      graphRawData?.filter((u) => u.created_at.startsWith(date)).length || 0;
-    return {
-      date: new Date(date).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      }),
-      users: usersOnDate,
-    };
-  });
+  // Growth: users in last 7 days
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const recentGrowth = recentUsers?.filter(
+    (u) => new Date(u.created_at) > sevenDaysAgo
+  ).length || 0;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-black text-white rounded-xl shadow-md shrink-0">
-            <Activity size={24} className="sm:w-7 sm:h-7" />
-          </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-black tracking-tight">
-              System Overview
-            </h1>
-            <p className="text-zinc-500 text-xs sm:text-sm font-medium mt-0.5 sm:mt-1">
-              Growth analytics and access management.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">
+            System Overview
+          </h1>
+          <p className="text-zinc-500 text-sm mt-1">
+            Platform health, growth metrics, and recent activity.
+          </p>
         </div>
-        <div className="w-full sm:w-auto overflow-x-auto flex sm:justify-end">
-          <DateFilter />
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800">
+          <Clock size={14} className="text-zinc-500" />
+          <span className="text-zinc-400 text-xs">
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <BigStatCard
-          title="Total Authorized"
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <StatCard
+          title="Total Users"
           value={totalUsers || 0}
-          icon={
-            <ShieldCheck className="w-6 h-6 sm:w-8 sm:h-8" strokeWidth={2} />
-          }
-          colorClass="bg-blue-50 text-blue-600"
+          subtitle={`${recentGrowth} this week`}
+          icon={Users}
+          color="blue"
         />
-        <BigStatCard
-          title="Total Tokens"
-          value={totalTokens}
-          icon={<Ticket className="w-6 h-6 sm:w-8 sm:h-8" strokeWidth={2} />}
-          colorClass="bg-purple-50 text-purple-600"
+        <StatCard
+          title="Tenants"
+          value={totalTenants}
+          subtitle={`${tenantsInMaintenance} in maintenance`}
+          icon={Building2}
+          color="purple"
         />
-        <BigStatCard
-          title="Used Tokens"
-          value={usedTokens}
-          icon={<Users className="w-6 h-6 sm:w-8 sm:h-8" strokeWidth={2} />}
-          colorClass="bg-orange-50 text-orange-600"
+        <StatCard
+          title="Knowledge Files"
+          value={totalFiles || 0}
+          subtitle="Across all tenants"
+          icon={Database}
+          color="emerald"
         />
-        <BigStatCard
-          title="Available Tokens"
-          value={activeTokens}
-          icon={<KeyRound className="w-6 h-6 sm:w-8 sm:h-8" strokeWidth={2} />}
-          colorClass="bg-emerald-50 text-emerald-600"
+        <StatCard
+          title="Chat Messages"
+          value={totalChats || 0}
+          subtitle="Total interactions"
+          icon={MessageSquare}
+          color="amber"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-zinc-200 overflow-hidden">
-          <h3 className="text-base sm:text-lg font-bold text-black tracking-tight mb-4">
-            {chartTitle}
-          </h3>
-          <div className="w-full overflow-x-auto">
-            <DashboardChart data={chartData} />
+      {/* Secondary Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <MiniStat label="Available Tokens" value={availableTokens} />
+        <MiniStat label="Used Tokens" value={usedTokens} />
+        <MiniStat label="Revoked Tokens" value={revokedTokens} />
+        <MiniStat label="Banned Users" value={totalBannedUsers || 0} accent="red" />
+      </div>
+
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        {/* Recent Users */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">Recent Users</h3>
+            <a
+              href="/admin/users"
+              className="text-xs text-zinc-500 hover:text-white transition-colors"
+            >
+              View all &rarr;
+            </a>
+          </div>
+          <div className="divide-y divide-zinc-800/50">
+            {recentUsers?.map((user) => (
+              <div
+                key={user.telegram_id}
+                className="px-5 py-3 flex items-center justify-between hover:bg-zinc-800/30 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
+                    <Users size={12} className="text-zinc-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm text-white font-medium truncate">
+                      {user.username || `ID: ${user.telegram_id}`}
+                    </p>
+                    <p className="text-xs text-zinc-600">
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                    user.is_banned
+                      ? "bg-red-500/10 text-red-400"
+                      : "bg-emerald-500/10 text-emerald-400"
+                  }`}
+                >
+                  {user.is_banned ? "Banned" : "Active"}
+                </span>
+              </div>
+            ))}
+            {(!recentUsers || recentUsers.length === 0) && (
+              <div className="px-5 py-8 text-center text-zinc-600 text-sm">
+                No users yet.
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="lg:col-span-1 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-zinc-200 flex flex-col justify-center">
-          <h3 className="text-base sm:text-lg font-bold text-black tracking-tight mb-4 sm:mb-6">
-            Global Token Usage
-          </h3>
-          <div className="flex items-end gap-2 mb-2">
-            <span className="text-4xl sm:text-5xl font-black text-black tracking-tighter">
-              {usagePercentage}%
-            </span>
-            <span className="text-zinc-500 text-xs sm:text-sm font-medium pb-1">
-              Consumed
-            </span>
+        {/* Recent Activity */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">Recent Chat Activity</h3>
+            <a
+              href="/admin/analytics"
+              className="text-xs text-zinc-500 hover:text-white transition-colors"
+            >
+              View all &rarr;
+            </a>
           </div>
-          <div className="w-full h-3 sm:h-4 bg-zinc-100 rounded-full overflow-hidden mb-6">
+          <div className="divide-y divide-zinc-800/50">
+            {recentChats?.map((chat) => (
+              <div
+                key={chat.id}
+                className="px-5 py-3 hover:bg-zinc-800/30 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-zinc-500 font-mono">
+                    User {chat.telegram_id}
+                  </span>
+                  <span className="text-[10px] text-zinc-600">
+                    {new Date(chat.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <p className="text-sm text-zinc-300 truncate">
+                  {chat.user_query || "—"}
+                </p>
+                {chat.mode && (
+                  <span className="text-[10px] text-zinc-600 uppercase tracking-wider mt-1 inline-block">
+                    {chat.mode} mode
+                  </span>
+                )}
+              </div>
+            ))}
+            {(!recentChats || recentChats.length === 0) && (
+              <div className="px-5 py-8 text-center text-zinc-600 text-sm">
+                No chat activity yet.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Audit Trail Preview */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Activity size={14} className="text-zinc-500" />
+            Recent Admin Actions
+          </h3>
+          <a
+            href="/admin/audit"
+            className="text-xs text-zinc-500 hover:text-white transition-colors"
+          >
+            Full log &rarr;
+          </a>
+        </div>
+        <div className="divide-y divide-zinc-800/50">
+          {auditLogs?.map((log, i) => (
             <div
-              className="h-full bg-black rounded-full transition-all duration-1000"
-              style={{ width: `${usagePercentage}%` }}
-            ></div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-xs sm:text-sm font-medium">
-              <span className="text-zinc-500 flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-black"></div> Used
+              key={i}
+              className="px-5 py-3 flex items-center justify-between hover:bg-zinc-800/30 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                <span className="text-sm text-zinc-300 font-medium">
+                  {formatAction(log.action)}
+                </span>
+                <span className="text-xs text-zinc-600">
+                  on {log.entity_type}
+                </span>
+              </div>
+              <span className="text-xs text-zinc-600">
+                {timeAgo(log.performed_at)}
               </span>
-              <span className="text-black font-semibold">{usedTokens}</span>
             </div>
-            <div className="flex justify-between items-center text-xs sm:text-sm font-medium">
-              <span className="text-zinc-500 flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-zinc-200"></div>{" "}
-                Available
-              </span>
-              <span className="text-black font-semibold">{activeTokens}</span>
+          ))}
+          {(!auditLogs || auditLogs.length === 0) && (
+            <div className="px-5 py-6 text-center text-zinc-600 text-sm">
+              No admin actions recorded yet.
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col justify-between">
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-black tracking-tight mb-4">
-              Authorized Users List
-            </h3>
-            <div className="overflow-x-auto min-h-[300px] -mx-4 sm:mx-0 px-4 sm:px-0">
-              <table className="w-full text-left border-collapse min-w-[450px]">
-                <thead>
-                  <tr className="border-b-2 border-zinc-100">
-                    <th className="pb-3 px-2 font-bold text-zinc-400 uppercase tracking-wider text-[10px] sm:text-xs">
-                      Telegram ID
-                    </th>
-                    <th className="pb-3 px-2 font-bold text-zinc-400 uppercase tracking-wider text-[10px] sm:text-xs">
-                      Token Used
-                    </th>
-                    <th className="pb-3 px-2 font-bold text-zinc-400 uppercase tracking-wider text-[10px] sm:text-xs text-right">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedUsers?.map((user) => (
-                    <tr
-                      key={user.telegram_id}
-                      className="border-b border-zinc-50 hover:bg-zinc-50 transition-colors"
-                    >
-                      <td className="py-3 sm:py-4 px-2 font-mono text-xs sm:text-sm text-black font-semibold">
-                        {user.telegram_id}
-                      </td>
-                      <td className="py-3 sm:py-4 px-2 text-[11px] sm:text-xs text-zinc-500 font-mono truncate max-w-[120px]">
-                        {user.token_id || "N/A"}
-                      </td>
-                      <td className="py-3 sm:py-4 px-2 text-right">
-                        <span
-                          className={`px-2 py-0.5 sm:py-1 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${user.is_banned ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
-                        >
-                          {user.is_banned ? "Banned" : "Active"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-zinc-100">
-            <TablePagination
-              totalItems={totalUsersCount || 0}
-              itemsPerPage={ITEMS_PER_PAGE}
-              itemName="Users"
-            />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col justify-between">
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-black tracking-tight mb-4">
-              Generated Tokens
-            </h3>
-            <div className="overflow-x-auto min-h-[300px] -mx-4 sm:mx-0 px-4 sm:px-0">
-              <table className="w-full text-left border-collapse min-w-[450px]">
-                <thead>
-                  <tr className="border-b-2 border-zinc-100">
-                    <th className="pb-3 px-2 font-bold text-zinc-400 uppercase tracking-wider text-[10px] sm:text-xs">
-                      Token String
-                    </th>
-                    <th className="pb-3 px-2 font-bold text-zinc-400 uppercase tracking-wider text-[10px] sm:text-xs">
-                      Type / To
-                    </th>
-                    <th className="pb-3 px-2 font-bold text-zinc-400 uppercase tracking-wider text-[10px] sm:text-xs text-right">
-                      State
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedTokens?.map((token) => (
-                    <tr
-                      key={token.id}
-                      className="border-b border-zinc-50 hover:bg-zinc-50 transition-colors"
-                    >
-                      <td className="py-3 sm:py-4 px-2 font-mono text-[11px] sm:text-xs text-black font-semibold truncate max-w-[120px]">
-                        {token.token_string}
-                      </td>
-                      <td className="py-3 sm:py-4 px-2">
-                        <div className="text-xs sm:text-sm font-medium text-black capitalize">
-                          {token.token_type || "Normal"}
-                        </div>
-                      </td>
-                      <td className="py-3 sm:py-4 px-2 text-right">
-                        <span
-                          className={`px-2 py-0.5 sm:py-1 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${token.is_used ? "bg-zinc-100 text-zinc-500" : "bg-blue-100 text-blue-700"}`}
-                        >
-                          {token.is_used ? "Used" : "Unused"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-zinc-100">
-            <TablePagination
-              totalItems={totalTokensCount || 0}
-              itemsPerPage={ITEMS_PER_PAGE}
-              itemName="Tokens"
-            />
-          </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function BigStatCard({ title, value, icon, colorClass }) {
+// ─── Components ──────────────────────────────────────────────────
+
+function StatCard({ title, value, subtitle, icon: Icon, color }) {
+  const colorMap = {
+    blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    purple: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    emerald: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    amber: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  };
+
   return (
-    <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-zinc-200 flex items-center gap-4 w-full">
-      <div
-        className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}
-      >
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <h3 className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider truncate">
-          {title}
-        </h3>
-        <div className="text-2xl sm:text-3xl font-black text-black tracking-tight mt-0.5">
-          {value}
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 md:p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div
+          className={`w-9 h-9 rounded-lg flex items-center justify-center border ${colorMap[color]}`}
+        >
+          <Icon size={16} />
         </div>
       </div>
+      <div className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+        {typeof value === "number" ? value.toLocaleString() : value}
+      </div>
+      <p className="text-xs text-zinc-500 mt-1 font-medium">{title}</p>
+      {subtitle && (
+        <p className="text-[11px] text-zinc-600 mt-0.5">{subtitle}</p>
+      )}
     </div>
   );
+}
+
+function MiniStat({ label, value, accent }) {
+  return (
+    <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg px-4 py-3 flex items-center justify-between">
+      <span className="text-xs text-zinc-500 font-medium">{label}</span>
+      <span
+        className={`text-sm font-bold ${
+          accent === "red" ? "text-red-400" : "text-white"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+function formatAction(action) {
+  return action
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function timeAgo(dateStr) {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }
