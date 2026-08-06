@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { supabaseAdmin } from "../../lib/supabaseAdmin";
 import { Building2 } from "lucide-react";
 import TenantsTable from "./TenantsTable";
