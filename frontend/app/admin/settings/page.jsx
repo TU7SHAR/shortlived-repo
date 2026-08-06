@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { supabaseAdmin } from "../../lib/supabaseAdmin";
 import { Settings } from "lucide-react";
 import SettingsPanel from "./SettingsPanel";
