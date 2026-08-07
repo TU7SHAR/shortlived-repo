@@ -29,21 +29,28 @@ export default function Login() {
         document.cookie =
           "sb-access-auth-token=true; path=/; max-age=604800; SameSite=Lax";
 
-        // Route by role: normal users → /chat, admins → /dashboard
+        // Decide destination by role: normal users → /chat, admins → /dashboard
+        let dest = "/dashboard";
         try {
           const res = await fetch(`/api/chat/user?authId=${session.user.id}`);
           const data = await res.json();
-          if (data.role === "user") {
-            window.location.href = "/chat";
-            return;
-          }
+          if (data.role === "user") dest = "/chat";
         } catch (e) {
-          // fall through to admin flow
+          // default to /dashboard on any lookup failure
         }
 
-        // Admin: ensure their admin token exists, then go to dashboard
-        await ensureAdminToken(session.user.id);
-        window.location.href = "/dashboard";
+        // Best-effort admin token creation — MUST NOT block the redirect.
+        // (It's a server action; if it fails on a stale build the redirect
+        // would otherwise hang and leave the user stuck on /login.)
+        if (dest === "/dashboard") {
+          try {
+            Promise.resolve(ensureAdminToken(session.user.id)).catch(() => {});
+          } catch (e) {
+            /* ignore */
+          }
+        }
+
+        window.location.href = dest;
       }
     });
 
