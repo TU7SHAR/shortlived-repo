@@ -58,6 +58,7 @@ export async function POST(request) {
         body: JSON.stringify({
           admin_id: adminId,
           message,
+          user_id: authId,
           telegram_id: telegramId,
           mode: mode || "assistant",
         }),
