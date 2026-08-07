@@ -35,7 +35,7 @@ export async function logoutSuperAdmin() {
   await logAuditAction("LOGOUT", "session", null, {});
   const cookieStore = await cookies();
   cookieStore.delete("super-admin-auth-token");
-  redirect("/admin/login");
+  redirect("/login");
 }
 
 // ═══════════════════════════════════════════════════════
