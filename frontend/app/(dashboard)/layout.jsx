@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { supabase } from "../lib/supabase"; // Ensure this path is correct
 import Sidebar from "../components/Sidebar"; // Ensure this path is correct
 import Topbar from "../components/Topbar"; // Ensure this path is correct
@@ -10,6 +11,10 @@ import { clearUserCookies } from "@/app/actions/logout";
 export default function DashboardLayout({ children }) {
   const [isVerifying, setIsVerifying] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+
+  // /chat renders standalone (its own full-screen UI, no dashboard chrome)
+  const isStandalone = pathname === "/chat";
 
   useEffect(() => {
     // Define the verification logic
@@ -63,6 +68,12 @@ export default function DashboardLayout({ children }) {
         Verifying secure access...
       </div>
     );
+  }
+
+  // Standalone pages (e.g. /chat) render full-screen without the
+  // dashboard sidebar/topbar — just the page's own UI.
+  if (isStandalone) {
+    return <SubscriptionProvider>{children}</SubscriptionProvider>;
   }
 
   return (
