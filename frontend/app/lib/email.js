@@ -4,28 +4,24 @@ import nodemailer from "nodemailer";
 import { siteConfig } from "../utils/config";
 
 /**
- * Gmail API (OAuth2) transporter.
+ * Gmail SMTP transporter using an App Password (simple + reliable).
  *
  * How to get the credentials:
- * 1. Go to Google Cloud Console → APIs & Services → Enable "Gmail API"
- * 2. Create OAuth2 credentials (Web application type)
- * 3. Use OAuth2 Playground to get a refresh token for salesji.team@gmail.com
- * 4. Put the values in .env.local (see README.md)
+ * 1. Enable 2-Step Verification on the Gmail account
+ * 2. Google Account → Security → App passwords → generate one for "Mail"
+ * 3. You get a 16-char password like "abcd efgh ijkl mnop" (remove spaces)
  *
  * Env vars needed:
- *   GMAIL_USER          = salesji.team@gmail.com
- *   GMAIL_CLIENT_ID     = xxxx.apps.googleusercontent.com
- *   GMAIL_CLIENT_SECRET = GOCSPX-xxxx
- *   GMAIL_REFRESH_TOKEN = 1//xxxx
+ *   GMAIL_USER         = salesjiteam@gmail.com
+ *   GMAIL_APP_PASSWORD = abcdefghijklmnop   (16 chars, no spaces)
  */
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
   auth: {
-    type: "OAuth2",
     user: process.env.GMAIL_USER,
-    clientId: process.env.GMAIL_CLIENT_ID,
-    clientSecret: process.env.GMAIL_CLIENT_SECRET,
-    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+    pass: (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, ""),
   },
 });
 
