@@ -51,7 +51,13 @@ export async function sendWelcomeEmail(toEmail) {
 
 export async function sendCredentialsEmail(toEmail, password, telegramLink, caption) {
   try {
-    const loginUrl = `${siteConfig.url?.replace(/\/$/, "") || ""}/login`;
+    // Use a runtime server env (APP_BASE_URL) so the link is correct
+    // regardless of where the build was produced. Falls back to prod domain.
+    const base = (process.env.APP_BASE_URL || "https://app.salesji.com").replace(
+      /\/$/,
+      ""
+    );
+    const loginUrl = `${base}/login`;
     const mailOptions = {
       from: `"${siteConfig.name}" <${process.env.GMAIL_USER}>`,
       to: toEmail,

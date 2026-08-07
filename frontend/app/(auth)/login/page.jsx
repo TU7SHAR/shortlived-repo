@@ -26,9 +26,23 @@ export default function Login() {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_IN" && session) {
         setLoading(true);
-        await ensureAdminToken(session.user.id);
         document.cookie =
           "sb-access-auth-token=true; path=/; max-age=604800; SameSite=Lax";
+
+        // Route by role: normal users → /chat, admins → /dashboard
+        try {
+          const res = await fetch(`/api/chat/user?authId=${session.user.id}`);
+          const data = await res.json();
+          if (data.role === "user") {
+            window.location.href = "/chat";
+            return;
+          }
+        } catch (e) {
+          // fall through to admin flow
+        }
+
+        // Admin: ensure their admin token exists, then go to dashboard
+        await ensureAdminToken(session.user.id);
         window.location.href = "/dashboard";
       }
     });
