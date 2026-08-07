@@ -3,10 +3,10 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// GET: Load conversations for a user
+// GET: Load conversations for a user (by auth user id)
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
+  const userId = searchParams.get("userId"); // auth user id (uuid)
 
   if (!userId) {
     return NextResponse.json({ error: "userId required" }, { status: 400 });
@@ -15,7 +15,7 @@ export async function GET(request) {
   const { data: conversations, error } = await supabaseAdmin
     .from("web_chat_conversations")
     .select("*")
-    .eq("telegram_id", parseInt(userId))
+    .eq("user_id", userId)
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -27,24 +27,28 @@ export async function GET(request) {
 
 // POST: Create a new conversation
 export async function POST(request) {
-  const { userId, title } = await request.json();
+  const { userId, adminId, title } = await request.json();
 
   if (!userId) {
     return NextResponse.json({ error: "userId required" }, { status: 400 });
   }
 
-  // Get admin_id
-  const { data: user } = await supabaseAdmin
-    .from("authorized_users")
-    .select("admin_id")
-    .eq("telegram_id", parseInt(userId))
-    .single();
+  // Resolve admin_id if not provided
+  let resolvedAdminId = adminId;
+  if (!resolvedAdminId) {
+    const { data: webUser } = await supabaseAdmin
+      .from("web_chat_users")
+      .select("admin_id")
+      .eq("id", userId)
+      .maybeSingle();
+    resolvedAdminId = webUser?.admin_id || userId;
+  }
 
   const { data, error } = await supabaseAdmin
     .from("web_chat_conversations")
     .insert({
-      telegram_id: parseInt(userId),
-      admin_id: user?.admin_id,
+      user_id: userId,
+      admin_id: resolvedAdminId,
       title: title || "New Chat",
     })
     .select()
@@ -66,7 +70,6 @@ export async function DELETE(request) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  // Delete messages first
   await supabaseAdmin
     .from("web_chat_messages")
     .delete()
