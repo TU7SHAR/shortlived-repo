@@ -10,6 +10,10 @@
 # --- Telegram bot (job-queue extra pulls APScheduler) ---
 python-telegram-bot[job-queue]==22.7
 
+# --- Web chat HTTP service (reuses the same RAG engine) ---
+fastapi==0.115.6
+uvicorn==0.34.0
+
 # --- Supabase / DB / HTTP ---
 supabase==2.30.0
 httpx==0.28.1
