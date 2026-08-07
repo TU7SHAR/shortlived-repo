@@ -249,35 +249,45 @@ async function callGemini(userMessage, context, temperature = 0.2) {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    // Fallback: try Groq
     return callGroq(userMessage, context, temperature);
   }
 
   const fullSystemPrompt = `${SYSTEM_PROMPT}\n\nCONTEXT:\n${context}`;
+  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: fullSystemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: userMessage }] }],
-        generationConfig: {
-          temperature,
-          maxOutputTokens: 4096,
-        },
-      }),
+  for (const model of models) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: fullSystemPrompt }] },
+            contents: [{ role: "user", parts: [{ text: userMessage }] }],
+            generationConfig: { temperature, maxOutputTokens: 4096 },
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return cleanResponse(data.candidates[0].content.parts[0].text);
+      }
+
+      if (data?.error) {
+        console.warn(`[Gemini] Model ${model} failed: ${data.error.message}`);
+        if (data.error.code === 429) continue; // Rate limited, try next model
+        if (data.error.code === 404) continue; // Not found, try next model
+      }
+    } catch (e) {
+      console.warn(`[Gemini] Model ${model} error: ${e.message}`);
+      continue;
     }
-  );
-
-  const data = await response.json();
-
-  if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-    return cleanResponse(data.candidates[0].content.parts[0].text);
   }
 
-  // Fallback to Groq if Gemini fails
+  // All Gemini models failed, fall back to Groq
   return callGroq(userMessage, context, temperature);
 }
 
@@ -289,26 +299,42 @@ async function callGroq(userMessage, context, temperature = 0.2) {
   if (!apiKey) throw new Error("No LLM API key available (neither GEMINI nor GROQ)");
 
   const fullSystemPrompt = `${SYSTEM_PROMPT}\n\nCONTEXT:\n${context}`;
+  const models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"];
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      messages: [
-        { role: "system", content: fullSystemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature,
-      max_tokens: 4096,
-    }),
-  });
+  for (const model of models) {
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: fullSystemPrompt },
+            { role: "user", content: userMessage },
+          ],
+          temperature,
+          max_tokens: 4096,
+        }),
+      });
 
-  const data = await response.json();
-  return cleanResponse(data?.choices?.[0]?.message?.content || "I apologize, but I encountered an error.");
+      const data = await response.json();
+      if (data?.choices?.[0]?.message?.content) {
+        return cleanResponse(data.choices[0].message.content);
+      }
+      if (data?.error) {
+        console.warn(`[Groq] Model ${model} failed: ${data.error.message}`);
+        continue;
+      }
+    } catch (e) {
+      console.warn(`[Groq] Model ${model} error: ${e.message}`);
+      continue;
+    }
+  }
+
+  throw new Error("All Groq models failed");
 }
 
 // ═══════════════════════════════════════════════════════

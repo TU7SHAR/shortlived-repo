@@ -22,8 +22,8 @@ import logging
 import asyncio
 from config import (
     LLM_PROVIDER,
-    GROQ_API_KEY, GROQ_MODEL,
-    GEMINI_API_KEY, GEMINI_MODEL,
+    GROQ_API_KEY, GROQ_MODEL, GROQ_FALLBACK_MODELS,
+    GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODELS,
 )
 
 logger = logging.getLogger(__name__)
@@ -93,36 +93,72 @@ def get_provider_name() -> str:
 
 def _groq_complete(system_prompt, user_prompt, temperature, max_tokens, json_mode) -> str:
     client = _init_groq()
-    kwargs = {
-        "model": GROQ_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-    if json_mode:
-        kwargs["response_format"] = {"type": "json_object"}
-    resp = client.chat.completions.create(**kwargs)
-    return resp.choices[0].message.content.strip()
+    models_to_try = [GROQ_MODEL] + GROQ_FALLBACK_MODELS
+    last_error = None
+
+    for model in models_to_try:
+        try:
+            kwargs = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            resp = client.chat.completions.create(**kwargs)
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            last_error = e
+            error_str = str(e)
+            if "404" in error_str or "model" in error_str.lower():
+                logger.warning(f"Groq model '{model}' not found, trying next...")
+                continue
+            elif "429" in error_str or "rate" in error_str.lower():
+                logger.warning(f"Groq model '{model}' rate limited, trying next...")
+                continue
+            else:
+                raise  # Unknown error, don't retry with different model
+
+    raise last_error or RuntimeError("All Groq models failed")
 
 
 def _gemini_complete(system_prompt, user_prompt, temperature, max_tokens, json_mode) -> str:
     client = _init_gemini()
-    full_prompt = f"{system_prompt}\n\n{user_prompt}"
-    config = _genai.types.GenerateContentConfig(
-        temperature=temperature,
-        max_output_tokens=max_tokens,
-    )
-    if json_mode:
-        config.response_mime_type = "application/json"
-    resp = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=full_prompt,
-        config=config,
-    )
-    return (resp.text or "").strip()
+    models_to_try = [GEMINI_MODEL] + GEMINI_FALLBACK_MODELS
+    last_error = None
+
+    for model in models_to_try:
+        try:
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
+            config = _genai.types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            )
+            if json_mode:
+                config.response_mime_type = "application/json"
+            resp = client.models.generate_content(
+                model=model,
+                contents=full_prompt,
+                config=config,
+            )
+            return (resp.text or "").strip()
+        except Exception as e:
+            last_error = e
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                logger.warning(f"Gemini model '{model}' rate limited, trying next...")
+                continue
+            elif "404" in error_str or "not found" in error_str.lower():
+                logger.warning(f"Gemini model '{model}' not found, trying next...")
+                continue
+            else:
+                raise  # Unknown error, don't retry
+
+    raise last_error or RuntimeError("All Gemini models failed")
 
 
 _IMPL = {"groq": _groq_complete, "gemini": _gemini_complete}
