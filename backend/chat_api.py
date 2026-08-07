@@ -65,10 +65,36 @@ AI_RULES = (
 )
 
 
+# Mode-specific directives layered on top of AI_RULES. All modes use the
+# same knowledge base + engine; only the coaching instruction changes.
+MODE_DIRECTIVES = {
+    "assistant": "",
+    "onboarding": (
+        "\n\n--- MODE: ONBOARDING ---\n"
+        "You are onboarding a new sales rep. Warmly welcome them, then ask ONE question "
+        "at a time to learn their name, role, experience level, and primary sales goal. "
+        "Keep it conversational and brief. After they answer, acknowledge and continue."
+    ),
+    "training": (
+        "\n\n--- MODE: TRAINING ---\n"
+        "You are running an interactive sales training session using ONLY the knowledge base. "
+        "Give a concise briefing on our products/competitors relevant to the rep's message, "
+        "then pose a short roleplay objection for them to handle. Coach them on their answers."
+    ),
+    "testing": (
+        "\n\n--- MODE: TESTING ---\n"
+        "You are quizzing the sales rep on the company's knowledge base. Ask ONE clear question "
+        "at a time (mix factual and situational). After they answer, tell them if they're right, "
+        "give the correct answer from the knowledge base, and then ask the next question."
+    ),
+}
+
+
 class ChatRequest(BaseModel):
     admin_id: str
     message: str
     telegram_id: int | None = None  # optional; for analytics parity
+    mode: str | None = "assistant"  # assistant | onboarding | training | testing
 
 
 @app.get("/health")
@@ -109,7 +135,12 @@ async def chat(req: ChatRequest):
     except Exception:
         constraint_block = ""
 
-    full_context = (constraint_block + "\n\n" if constraint_block else "") + AI_RULES
+    mode_directive = MODE_DIRECTIVES.get((req.mode or "assistant").lower(), "")
+    full_context = (
+        (constraint_block + "\n\n" if constraint_block else "")
+        + AI_RULES
+        + mode_directive
+    )
     has_data = False
 
     # ── Phase 2: Knowledge cards (categorized, same as bot) ──
@@ -213,6 +244,10 @@ async def chat(req: ChatRequest):
         pass
 
     # ── Log to analytics (parity with bot) ──
+    # chat_analytics.mode only allows: normal | training | testing
+    analytics_mode = (req.mode or "assistant").lower()
+    if analytics_mode not in ("training", "testing"):
+        analytics_mode = "normal"
     try:
         log_chat_interaction(
             telegram_id=req.telegram_id or 0,
@@ -220,7 +255,7 @@ async def chat(req: ChatRequest):
             query=user_text,
             response=response,
             admin_id=admin_id,
-            mode="normal",
+            mode=analytics_mode,
         )
     except Exception as e:
         logger.debug(f"Analytics log skipped: {e}")

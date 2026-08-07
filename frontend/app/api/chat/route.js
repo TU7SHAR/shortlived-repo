@@ -14,7 +14,7 @@ const PY_CHAT_URL = process.env.PY_CHAT_URL || "http://127.0.0.1:8001/chat";
 // ═══════════════════════════════════════════════════════
 export async function POST(request) {
   try {
-    const { message, conversationId, authId } = await request.json();
+    const { message, conversationId, authId, mode } = await request.json();
 
     if (!message || !authId) {
       return NextResponse.json(
@@ -59,6 +59,7 @@ export async function POST(request) {
           admin_id: adminId,
           message,
           telegram_id: telegramId,
+          mode: mode || "assistant",
         }),
       });
 
