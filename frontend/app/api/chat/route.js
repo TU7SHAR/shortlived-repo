@@ -3,25 +3,14 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// ═══════════════════════════════════════════════════════
-// SYSTEM PROMPT - Replicates the Telegram bot's behavior
-// ═══════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `You are Salesji, an expert internal Sales Assistant for this company.
-Your ONLY source of truth is the CONTEXT provided below.
-
-CRITICAL INSTRUCTIONS:
-1. You MUST answer the user's question using ONLY the provided CONTEXT.
-2. If the answer cannot be found in the CONTEXT, you MUST refuse to answer and say exactly: "I do not have information on that in the company knowledge base."
-3. DO NOT use outside world knowledge. DO NOT guess, infer, or make up information.
-4. Always mention the source file(s) you used at the very end of your answer in a new line (e.g., "Source: [filename]").
-5. Keep sentences punchy, readable, and formatted for quick scanning.
-6. Use numbers like 1), 2), 3) for lists.
-7. When discussing competitors, ALWAYS pitch OUR products first.
-8. Translate features into ROI benefits for the sales rep.
-9. Provide word-for-word scripts the rep can use when possible.`;
+// The Python RAG service (same engine the Telegram bot uses).
+// Runs on the same server; override with PY_CHAT_URL if needed.
+const PY_CHAT_URL = process.env.PY_CHAT_URL || "http://127.0.0.1:8001/chat";
 
 // ═══════════════════════════════════════════════════════
-// MAIN CHAT HANDLER
+// WEB CHAT — thin proxy to the Python RAG engine
+// The frontend only handles: auth → admin resolution →
+// forward to Python → persist history. No AI logic here.
 // ═══════════════════════════════════════════════════════
 export async function POST(request) {
   try {
@@ -60,110 +49,34 @@ export async function POST(request) {
       );
     }
 
-    // 2. Check maintenance mode
-    const { data: settings } = await supabaseAdmin
-      .from("bot_settings")
-      .select("maintenance_mode, temperature, strict_knowledge_mode")
-      .eq("admin_id", adminId)
-      .single();
-
-    if (settings?.maintenance_mode) {
-      return NextResponse.json({
-        response: "The system is currently in maintenance mode. Please check back later.",
-        isMaintenanceMode: true,
+    // 2. Forward to the Python RAG engine (same brain as Telegram)
+    let aiResponse;
+    try {
+      const pyRes = await fetch(PY_CHAT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          admin_id: adminId,
+          message,
+          telegram_id: telegramId,
+        }),
       });
-    }
 
-    const temperature = settings?.temperature || 0.2;
-
-    // 3. Load Knowledge Base (condensed knowledge cards)
-    const { data: files } = await supabaseAdmin
-      .from("ingested_files")
-      .select("id, filename, category")
-      .eq("admin_id", adminId);
-
-    let fullContext = "";
-    let hasData = false;
-
-    if (files && files.length > 0) {
-      let ourProducts = "";
-      let competitors = "";
-      let priceLists = "";
-
-      for (const file of files) {
-        const { data: cards } = await supabaseAdmin
-          .from("condensed_knowledge_cards")
-          .select("card_json")
-          .eq("file_id", file.id);
-
-        if (!cards || cards.length === 0) continue;
-
-        const cardText = cards
-          .map((c) => (typeof c.card_json === "object" ? JSON.stringify(c.card_json) : c.card_json))
-          .join("\n");
-
-        if (!cardText.trim()) continue;
-
-        if (file.category === "Our Products") {
-          ourProducts += `\n\n--- OUR PRODUCT FILE: ${file.filename} ---\n${cardText}`;
-        } else if (file.category === "Competitor Products") {
-          competitors += `\n\n--- COMPETITOR FILE: ${file.filename} ---\n${cardText}`;
-        } else if (file.category === "Price Lists") {
-          priceLists += `\n\n--- PRICE LIST FILE: ${file.filename} ---\n${cardText}`;
-        }
+      if (!pyRes.ok) {
+        throw new Error(`Python chat service returned ${pyRes.status}`);
       }
 
-      if (ourProducts) {
-        fullContext += "\n\n=== OUR COMPANY'S PRODUCTS (PITCH THESE FIRST) ===" + ourProducts;
-        hasData = true;
-      }
-      if (priceLists) {
-        fullContext += "\n\n=== OUR PRICE LISTS ===" + priceLists;
-        hasData = true;
-      }
-      if (competitors) {
-        fullContext += "\n\n=== COMPETITOR DATA (USE ONLY TO COUNTER) ===" + competitors;
-        hasData = true;
-      }
+      const data = await pyRes.json();
+      aiResponse = data.response || "I couldn't generate a response right now.";
+    } catch (e) {
+      console.error("[/api/chat] Python service error:", e);
+      return NextResponse.json(
+        { error: "The assistant is temporarily unavailable. Please try again shortly." },
+        { status: 502 }
+      );
     }
 
-    // 4. Vector Search (if inline context is small)
-    if (!hasData || fullContext.length < 2000) {
-      const vectorResults = await vectorSearch(message, adminId);
-      if (vectorResults && vectorResults.length > 0) {
-        hasData = true;
-        fullContext += "\n\n=== RELEVANT VECTOR SEARCH RESULTS ===\n";
-        vectorResults.forEach((r, i) => {
-          fullContext += `\n[Result ${i + 1}]: ${r.content}\n`;
-        });
-      }
-    }
-
-    if (!hasData) {
-      return NextResponse.json({
-        response: "The knowledge base is currently empty. Please ask an Admin to upload documents first.",
-      });
-    }
-
-    // 5. Truncate context if too long
-    const MAX_CONTEXT = 100000;
-    if (fullContext.length > MAX_CONTEXT) {
-      fullContext = fullContext.slice(0, MAX_CONTEXT) + "\n... [Context truncated]";
-    }
-
-    // 6. Call LLM (Gemini)
-    const aiResponse = await callGemini(message, fullContext, temperature);
-
-    // 7. Log the interaction to chat_analytics (telegram_id may be null for web users)
-    await supabaseAdmin.from("chat_analytics").insert({
-      telegram_id: telegramId,
-      user_query: message,
-      bot_response: aiResponse,
-      admin_id: adminId,
-      mode: "normal",
-    });
-
-    // 8. Save to web chat history (keyed on the auth user id)
+    // 3. Persist to web chat history (analytics is logged by the Python service)
     if (conversationId) {
       await supabaseAdmin.from("web_chat_messages").insert([
         {
@@ -193,176 +106,4 @@ export async function POST(request) {
       { status: 500 }
     );
   }
-}
-
-// ═══════════════════════════════════════════════════════
-// VECTOR SEARCH via Supabase RPC
-// ═══════════════════════════════════════════════════════
-async function vectorSearch(query, adminId) {
-  try {
-    // Generate embedding via Gemini embedding API
-    const embedding = await getEmbedding(query);
-    if (!embedding) return [];
-
-    const { data, error } = await supabaseAdmin.rpc("match_embeddings", {
-      query_embedding: embedding,
-      match_threshold: 0.3,
-      match_count: 5,
-      p_admin_id: adminId,
-    });
-
-    if (error || !data) return [];
-
-    return data.map((match) => ({
-      content: match.content || match.source_text || "",
-      similarity: match.similarity,
-    }));
-  } catch (e) {
-    console.error("[Vector Search] Error:", e);
-    return [];
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-// EMBEDDING GENERATION via Gemini
-// ═══════════════════════════════════════════════════════
-async function getEmbedding(text) {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("[Embedding] No GEMINI_API_KEY, skipping vector search");
-      return null;
-    }
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: { parts: [{ text }] },
-          taskType: "RETRIEVAL_QUERY",
-        }),
-      }
-    );
-
-    const data = await response.json();
-    return data?.embedding?.values || null;
-  } catch (e) {
-    console.error("[Embedding] Error:", e);
-    return null;
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-// LLM CALL - Google Gemini
-// ═══════════════════════════════════════════════════════
-async function callGemini(userMessage, context, temperature = 0.2) {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    return callGroq(userMessage, context, temperature);
-  }
-
-  const fullSystemPrompt = `${SYSTEM_PROMPT}\n\nCONTEXT:\n${context}`;
-  const models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
-
-  for (const model of models) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: fullSystemPrompt }] },
-            contents: [{ role: "user", parts: [{ text: userMessage }] }],
-            generationConfig: { temperature, maxOutputTokens: 4096 },
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return cleanResponse(data.candidates[0].content.parts[0].text);
-      }
-
-      if (data?.error) {
-        console.warn(`[Gemini] Model ${model} failed: ${data.error.message}`);
-        if (data.error.code === 429) continue; // Rate limited, try next model
-        if (data.error.code === 404) continue; // Not found, try next model
-      }
-    } catch (e) {
-      console.warn(`[Gemini] Model ${model} error: ${e.message}`);
-      continue;
-    }
-  }
-
-  // All Gemini models failed, fall back to Groq
-  return callGroq(userMessage, context, temperature);
-}
-
-// ═══════════════════════════════════════════════════════
-// FALLBACK LLM - Groq
-// ═══════════════════════════════════════════════════════
-async function callGroq(userMessage, context, temperature = 0.2) {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error("No LLM API key available (neither GEMINI nor GROQ)");
-
-  const fullSystemPrompt = `${SYSTEM_PROMPT}\n\nCONTEXT:\n${context}`;
-  const models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"];
-
-  for (const model of models) {
-    try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: fullSystemPrompt },
-            { role: "user", content: userMessage },
-          ],
-          temperature,
-          max_tokens: 4096,
-        }),
-      });
-
-      const data = await response.json();
-      if (data?.choices?.[0]?.message?.content) {
-        return cleanResponse(data.choices[0].message.content);
-      }
-      if (data?.error) {
-        console.warn(`[Groq] Model ${model} failed: ${data.error.message}`);
-        continue;
-      }
-    } catch (e) {
-      console.warn(`[Groq] Model ${model} error: ${e.message}`);
-      continue;
-    }
-  }
-
-  throw new Error("All Groq models failed");
-}
-
-// ═══════════════════════════════════════════════════════
-// RESPONSE CLEANING
-// ═══════════════════════════════════════════════════════
-function cleanResponse(text) {
-  let cleaned = text;
-  // Remove <think> tags
-  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, "");
-  // Remove markdown headers
-  cleaned = cleaned.replace(/^#{1,6}\s*/gm, "");
-  // Remove bold markdown
-  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, "$1");
-  // Remove italic markdown
-  cleaned = cleaned.replace(/\*(.+?)\*/g, "$1");
-  // Remove code backticks
-  cleaned = cleaned.replace(/`(.+?)`/g, "$1");
-  return cleaned.trim();
 }
