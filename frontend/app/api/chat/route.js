@@ -25,30 +25,40 @@ CRITICAL INSTRUCTIONS:
 // ═══════════════════════════════════════════════════════
 export async function POST(request) {
   try {
-    const { message, conversationId, userId } = await request.json();
+    const { message, conversationId, authId } = await request.json();
 
-    if (!message || !userId) {
+    if (!message || !authId) {
       return NextResponse.json(
-        { error: "Message and userId are required" },
+        { error: "Message and authId are required" },
         { status: 400 }
       );
     }
 
-    // 1. Get user's admin_id from authorized_users
-    const { data: userData } = await supabaseAdmin
-      .from("authorized_users")
-      .select("admin_id, telegram_id")
-      .eq("telegram_id", userId)
-      .single();
+    // 1. Resolve this user's tenant admin_id.
+    //    Web users are mapped in web_chat_users; admins own their own data.
+    let adminId = null;
+    let telegramId = null;
 
-    if (!userData || !userData.admin_id) {
+    const { data: webUser } = await supabaseAdmin
+      .from("web_chat_users")
+      .select("admin_id, telegram_id")
+      .eq("id", authId)
+      .maybeSingle();
+
+    if (webUser?.admin_id) {
+      adminId = webUser.admin_id;
+      telegramId = webUser.telegram_id || null;
+    } else {
+      // Treat the auth user as an admin (their id IS the admin_id)
+      adminId = authId;
+    }
+
+    if (!adminId) {
       return NextResponse.json(
-        { error: "User not authorized or no admin linked" },
+        { error: "Could not resolve your account. Contact your admin." },
         { status: 403 }
       );
     }
-
-    const adminId = userData.admin_id;
 
     // 2. Check maintenance mode
     const { data: settings } = await supabaseAdmin
@@ -144,28 +154,30 @@ export async function POST(request) {
     // 6. Call LLM (Gemini)
     const aiResponse = await callGemini(message, fullContext, temperature);
 
-    // 7. Log the interaction
+    // 7. Log the interaction to chat_analytics (telegram_id may be null for web users)
     await supabaseAdmin.from("chat_analytics").insert({
-      telegram_id: parseInt(userId),
+      telegram_id: telegramId,
       user_query: message,
       bot_response: aiResponse,
       admin_id: adminId,
       mode: "normal",
     });
 
-    // 8. Save to web chat history
+    // 8. Save to web chat history (keyed on the auth user id)
     if (conversationId) {
       await supabaseAdmin.from("web_chat_messages").insert([
         {
           conversation_id: conversationId,
-          telegram_id: parseInt(userId),
+          user_id: authId,
+          telegram_id: telegramId,
           admin_id: adminId,
           role: "user",
           content: message,
         },
         {
           conversation_id: conversationId,
-          telegram_id: parseInt(userId),
+          user_id: authId,
+          telegram_id: telegramId,
           admin_id: adminId,
           role: "assistant",
           content: aiResponse,

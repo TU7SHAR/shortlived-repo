@@ -17,7 +17,9 @@ import {
 
 export default function ChatPage() {
   const [user, setUser] = useState(null);
-  const [telegramId, setTelegramId] = useState(null);
+  const [authId, setAuthId] = useState(null);
+  const [adminId, setAdminId] = useState(null);
+  const [ready, setReady] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -31,20 +33,25 @@ export default function ChatPage() {
   useEffect(() => {
     const getUser = async () => {
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
+      if (!authUser) {
+        setReady(true);
+        return;
+      }
       setUser(authUser);
+      setAuthId(authUser.id);
       const res = await fetch(`/api/chat/user?authId=${authUser.id}`);
       const data = await res.json();
-      if (data.telegramId) setTelegramId(data.telegramId);
+      if (data.adminId) setAdminId(data.adminId);
+      setReady(true);
     };
     getUser();
   }, []);
 
   // Load conversations
   useEffect(() => {
-    if (!telegramId) return;
+    if (!authId) return;
     loadConversations();
-  }, [telegramId]);
+  }, [authId]);
 
   // Auto-scroll
   useEffect(() => {
@@ -52,7 +59,7 @@ export default function ChatPage() {
   }, [messages]);
 
   const loadConversations = async () => {
-    const res = await fetch(`/api/chat/conversations?userId=${telegramId}`);
+    const res = await fetch(`/api/chat/conversations?userId=${authId}`);
     const data = await res.json();
     setConversations(data.conversations || []);
   };
@@ -73,7 +80,7 @@ export default function ChatPage() {
     const res = await fetch("/api/chat/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: telegramId, title: "New Chat" }),
+      body: JSON.stringify({ userId: authId, adminId, title: "New Chat" }),
     });
     const data = await res.json();
     if (data.conversation) {
@@ -111,7 +118,7 @@ export default function ChatPage() {
       const res = await fetch("/api/chat/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: telegramId, title: userMessage.slice(0, 50) }),
+        body: JSON.stringify({ userId: authId, adminId, title: userMessage.slice(0, 50) }),
       });
       const data = await res.json();
       if (data.conversation) {
@@ -125,7 +132,7 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, conversationId: convId, userId: telegramId }),
+        body: JSON.stringify({ message: userMessage, conversationId: convId, authId }),
       });
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", content: data.response || data.error || "Something went wrong.", id: Date.now() + 1 }]);
@@ -137,13 +144,13 @@ export default function ChatPage() {
     }
   };
 
-  if (user && !telegramId) {
+  if (ready && !user) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-64px)] bg-zinc-50">
         <div className="text-center p-8 max-w-md">
           <Sparkles size={48} className="text-zinc-300 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-zinc-800 mb-2">Chat Not Available</h2>
-          <p className="text-zinc-500 text-sm">Your account is not linked to a Telegram user yet. Please contact your admin to get access.</p>
+          <h2 className="text-xl font-bold text-zinc-800 mb-2">Please log in</h2>
+          <p className="text-zinc-500 text-sm">You need to be signed in to use the chat.</p>
         </div>
       </div>
     );
@@ -228,8 +235,8 @@ export default function ChatPage() {
         {/* Input */}
         <div className="border-t border-zinc-200 p-4 bg-white">
           <form onSubmit={sendMessage} className="max-w-3xl mx-auto flex items-end gap-2">
-            <textarea ref={inputRef} value={input} onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px"; }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} placeholder="Ask Salesji anything..." rows={1} disabled={loading || !telegramId} className="w-full flex-1 resize-none rounded-xl border border-zinc-300 px-4 py-3 text-sm text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all disabled:opacity-50" />
-            <button type="submit" disabled={loading || !input.trim() || !telegramId} className="p-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0">
+            <textarea ref={inputRef} value={input} onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px"; }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} placeholder="Ask Salesji anything..." rows={1} disabled={loading || !authId} className="w-full flex-1 resize-none rounded-xl border border-zinc-300 px-4 py-3 text-sm text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all disabled:opacity-50" />
+            <button type="submit" disabled={loading || !input.trim() || !authId} className="p-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0">
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
             </button>
           </form>

@@ -26,7 +26,7 @@ import {
 import gsap from "gsap";
 import { DB } from "@/app/lib/schema_map";
 import { applyFiltersAndSort } from "../../utils/sortUtils";
-import { sendInviteLink } from "../../lib/email";
+import { createUserInvite } from "../../lib/userInvite";
 import { supabase } from "@/app/lib/supabase";
 import { siteConfig } from "@/app/utils/config";
 
@@ -200,40 +200,36 @@ export default function DashboardHome() {
   const generateToken = async (e) => {
     e.preventDefault();
     if (!modalCaption.trim()) return;
+
+    // Email is now REQUIRED — every user invite provisions a web login too
+    if (!modalEmail.trim()) {
+      alert("Email is required. The user needs it to log into the web app.");
+      return;
+    }
+
     setIsGenerating(true);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const uniqueToken =
-        "token_" +
-        Math.random().toString(36).substring(2, 15) +
-        Math.random().toString(36).substring(2, 15);
-      const isLocalhost =
-        typeof window !== "undefined"
-          ? window.location.hostname === "localhost" ||
-            window.location.hostname === "127.0.0.1"
-          : process.env.NODE_ENV === "development";
-      const botUsername = siteConfig.botUsername || "salesji_bot";
-      const generatedLink = `https://t.me/${botUsername}?start=${uniqueToken}`;
 
-      const payload = {
-        [DB.TOKENS.TOKEN_STRING]: generatedLink,
-        [DB.TOKENS.CREATED_BY]: user.id,
-        [DB.TOKENS.IS_USED]: false,
-        [DB.TOKENS.CAPTION]: modalCaption,
-        [DB.TOKENS.TOKEN_TYPE]: "user",
-        [DB.TOKENS.IS_REVOKED]: false,
-        sent_to: modalEmail || null,
-      };
+      // Provision the normal user: creates a web login (email + password),
+      // maps them to this admin, creates a Telegram token, and emails both.
+      const result = await createUserInvite(
+        user.id,
+        modalEmail.trim(),
+        modalCaption,
+      );
 
-      const { data, error } = await supabase
-        .from(DB.TOKENS.TABLE)
-        .insert([payload])
-        .select();
-      if (error) throw error;
-      if (modalEmail.trim() && data)
-        await sendInviteLink(modalEmail, generatedLink, modalCaption);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to create user invite.");
+      }
+
+      if (!result.emailSent) {
+        alert(
+          `User created, but the email failed to send (${result.emailError || "unknown error"}). Share the Telegram link manually:\n${result.telegramLink}`,
+        );
+      }
 
       setModalCaption("");
       setModalEmail("");
@@ -985,16 +981,17 @@ export default function DashboardHome() {
                     <span
                       className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
                       style={{
-                        background: "#eff6ff",
-                        color: "#2563eb",
-                        border: "1px solid #bfdbfe",
+                        background: "#fef2f2",
+                        color: "#dc2626",
+                        border: "1px solid #fecaca",
                       }}
                     >
-                      Optional
+                      Required
                     </span>
                   </div>
                   <input
                     type="email"
+                    required
                     placeholder="team@company.com"
                     value={modalEmail}
                     onChange={(e) => setModalEmail(e.target.value)}
@@ -1014,8 +1011,8 @@ export default function DashboardHome() {
                     }}
                   />
                   <p className="text-xs" style={{ color: "#94a3b8" }}>
-                    Leave blank to copy manually, or we'll send it to their
-                    inbox
+                    We'll email login credentials (password) and the Telegram
+                    link to this address
                   </p>
                 </div>
 

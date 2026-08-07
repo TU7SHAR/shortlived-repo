@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// GET: Look up a user's telegram_id from their Supabase auth ID
+// GET: Resolve a logged-in user's chat context from their Supabase auth id.
+// Returns { adminId, role, telegramId } so /chat knows which tenant's
+// knowledge base to use.
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const authId = searchParams.get("authId");
@@ -12,33 +14,41 @@ export async function GET(request) {
     return NextResponse.json({ error: "authId required" }, { status: 400 });
   }
 
-  // The authId IS the admin_id in authorized_users
-  // Find any telegram user linked to this admin
-  const { data, error } = await supabaseAdmin
-    .from("authorized_users")
-    .select("telegram_id")
-    .eq("admin_id", authId)
-    .limit(1)
-    .single();
+  // 1. Is this a mapped web-chat user (normal user invited by an admin)?
+  const { data: webUser } = await supabaseAdmin
+    .from("web_chat_users")
+    .select("admin_id, role, telegram_id")
+    .eq("id", authId)
+    .maybeSingle();
 
-  if (error || !data) {
-    // Fallback: check if the user IS an admin who also has tokens
-    // In this case, the admin themselves might be a user
-    const { data: tokenData } = await supabaseAdmin
-      .from("invite_tokens")
-      .select("used_by_telegram_id")
-      .eq("admin_id", authId)
-      .eq("token_type", "admin")
-      .not("used_by_telegram_id", "is", null)
-      .limit(1)
-      .single();
-
-    if (tokenData?.used_by_telegram_id) {
-      return NextResponse.json({ telegramId: tokenData.used_by_telegram_id });
-    }
-
-    return NextResponse.json({ telegramId: null });
+  if (webUser?.admin_id) {
+    return NextResponse.json({
+      adminId: webUser.admin_id,
+      role: webUser.role || "user",
+      telegramId: webUser.telegram_id || null,
+    });
   }
 
-  return NextResponse.json({ telegramId: data.telegram_id });
+  // 2. Otherwise, treat them as an admin (tenant owner). Their own auth id
+  //    IS the admin_id used across all tenant data.
+  const { data: ownTokens } = await supabaseAdmin
+    .from("invite_tokens")
+    .select("id")
+    .eq("admin_id", authId)
+    .limit(1);
+
+  if (ownTokens && ownTokens.length > 0) {
+    return NextResponse.json({
+      adminId: authId,
+      role: "admin",
+      telegramId: null,
+    });
+  }
+
+  // 3. Fallback: an admin with no tokens yet still owns their own data
+  return NextResponse.json({
+    adminId: authId,
+    role: "admin",
+    telegramId: null,
+  });
 }
