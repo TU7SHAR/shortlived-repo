@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
 
+// Pages that normal users (sales reps) are allowed to access.
+// Everything else in the (dashboard) group is admin-only.
+const NORMAL_USER_PAGES = new Set(["/chat"]);
+
+// Pages that are always public (no auth required)
+const PUBLIC_PAGES = new Set([
+  "/", "/features", "/pricing", "/contact", "/about",
+  "/privacy", "/terms", "/refunds",
+]);
+
+const AUTH_PAGES = new Set([
+  "/login", "/register", "/forgot-password", "/update-password",
+]);
+
 export default function proxy(request) {
   const { pathname } = request.nextUrl;
 
-  // 1. Admin Security Check
+  // ─── 1. Super Admin Security ───────────────────────────────
   if (pathname.startsWith("/admin")) {
-    // Allow unauthenticated access to the admin login page
     if (pathname === "/admin/login") {
-      // If already authenticated, redirect to admin dashboard
       const adminCookie = request.cookies.get("super-admin-auth-token");
       if (adminCookie?.value === process.env.SUPER_ADMIN_SECRET) {
         return NextResponse.redirect(new URL("/admin", request.url));
@@ -15,40 +27,41 @@ export default function proxy(request) {
       return NextResponse.next();
     }
 
-    // All other /admin/* routes require authentication
     const adminCookie = request.cookies.get("super-admin-auth-token");
-    const isAuthenticatedAdmin =
-      adminCookie?.value === process.env.SUPER_ADMIN_SECRET;
-
-    if (!isAuthenticatedAdmin) {
+    if (adminCookie?.value !== process.env.SUPER_ADMIN_SECRET) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
     return NextResponse.next();
   }
 
+  // ─── 2. Auth check ─────────────────────────────────────────
   const allCookies = request.cookies.getAll();
   const authCookie = allCookies.find((c) => c.name.startsWith("sb-"));
+  const isAuthPage = AUTH_PAGES.has(pathname);
+  const isPublicPage = PUBLIC_PAGES.has(pathname);
 
-  const isAuthPage =
-    pathname === "/login" ||
-    pathname === "/register" ||
-    pathname === "/forgot-password" ||
-    pathname === "/update-password";
-
-  const isPublicPage =
-    pathname === "/" ||
-    pathname === "/features" ||
-    pathname === "/pricing" ||
-    pathname === "/contact" ||
-    pathname === "/about";
-
+  // Not logged in + trying to access a protected page → login
   if (!authCookie && !isAuthPage && !isPublicPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // 4. Logic: Redirect to dashboard if logged in and trying to access login page
+  // Logged in + on an auth page → redirect to their home
   if (authCookie && isAuthPage) {
+    const role = request.cookies.get("salesji-user-role")?.value;
+    if (role === "user") {
+      return NextResponse.redirect(new URL("/chat", request.url));
+    }
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // ─── 3. Normal user guard ──────────────────────────────────
+  // If logged in as a normal user (role cookie = "user") and trying
+  // to access admin dashboard pages → bounce them to /chat.
+  if (authCookie && !isPublicPage && !isAuthPage) {
+    const role = request.cookies.get("salesji-user-role")?.value;
+    if (role === "user" && !NORMAL_USER_PAGES.has(pathname)) {
+      return NextResponse.redirect(new URL("/chat", request.url));
+    }
   }
 
   return NextResponse.next();
