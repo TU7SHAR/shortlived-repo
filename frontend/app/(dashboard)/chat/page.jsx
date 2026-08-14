@@ -19,6 +19,7 @@ import {
   ClipboardCheck,
   UserPlus,
   MessagesSquare,
+  KeyRound,
 } from "lucide-react";
 
 const MODES = [
@@ -73,6 +74,10 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mode, setMode] = useState("assistant");
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
+  const [passwordMsg, setPasswordMsg] = useState(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -154,6 +159,34 @@ export default function ChatPage() {
       await clearUserCookies();
     } catch (e) {}
     window.location.href = "/login";
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPasswordMsg(null);
+    if (passwordForm.new.length < 6) {
+      setPasswordMsg({ type: "error", text: "Password must be at least 6 characters." });
+      return;
+    }
+    if (passwordForm.new !== passwordForm.confirm) {
+      setPasswordMsg({ type: "error", text: "Passwords do not match." });
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.new });
+      if (error) {
+        setPasswordMsg({ type: "error", text: error.message });
+      } else {
+        setPasswordMsg({ type: "success", text: "Password updated successfully!" });
+        setPasswordForm({ current: "", new: "", confirm: "" });
+        setTimeout(() => setShowPasswordModal(false), 1500);
+      }
+    } catch (err) {
+      setPasswordMsg({ type: "error", text: "Failed to update password." });
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   const doSend = async (text) => {
@@ -341,6 +374,12 @@ export default function ChatPage() {
             </div>
           </div>
           <button
+            onClick={() => { setShowPasswordModal(true); setPasswordMsg(null); }}
+            className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium py-2 px-4 rounded-lg transition-colors text-sm mb-2"
+          >
+            <KeyRound size={14} /> Change Password
+          </button>
+          <button
             onClick={signOut}
             className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-lg transition-colors text-sm"
           >
@@ -471,6 +510,65 @@ export default function ChatPage() {
           </p>
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowPasswordModal(false)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl border border-slate-200">
+            <button onClick={() => setShowPasswordModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700">
+              <X size={18} />
+            </button>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+                <KeyRound size={18} className="text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Change Password</h3>
+                <p className="text-xs text-slate-400">Set a new password for your account</p>
+              </div>
+            </div>
+
+            {passwordMsg && (
+              <div className={`mb-4 px-3 py-2 rounded-lg text-sm ${passwordMsg.type === "error" ? "bg-red-50 text-red-600 border border-red-200" : "bg-emerald-50 text-emerald-600 border border-emerald-200"}`}>
+                {passwordMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-slate-500 block mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={passwordForm.new}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, new: e.target.value })}
+                  placeholder="Min 6 characters"
+                  required
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 block mb-1">Confirm Password</label>
+                <input
+                  type="password"
+                  value={passwordForm.confirm}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                  placeholder="Re-enter new password"
+                  required
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={passwordLoading}
+                className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors mt-2"
+              >
+                {passwordLoading ? "Updating..." : "Update Password"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
