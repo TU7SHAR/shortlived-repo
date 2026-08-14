@@ -31,13 +31,20 @@ export default function Login() {
 
         // Decide destination by role: normal users → /chat, admins → /dashboard
         let dest = "/dashboard";
+        let userRole = "admin";
         try {
           const res = await fetch(`/api/chat/user?authId=${session.user.id}`);
           const data = await res.json();
-          if (data.role === "user") dest = "/chat";
+          if (data.role === "user") {
+            dest = "/chat";
+            userRole = "user";
+          }
         } catch (e) {
           // default to /dashboard on any lookup failure
         }
+
+        // Set role cookie so middleware can guard routes without a DB call
+        document.cookie = `salesji-user-role=${userRole}; path=/; max-age=604800; SameSite=Lax`;
 
         // Best-effort admin token creation — MUST NOT block the redirect.
         // (It's a server action; if it fails on a stale build the redirect
