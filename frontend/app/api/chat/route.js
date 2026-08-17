@@ -24,19 +24,19 @@ export async function POST(request) {
     }
 
     // 1. Resolve this user's tenant admin_id.
-    //    Web users are mapped in web_chat_users; admins own their own data.
+    //    Users are in authorized_users (unified); admins own their own data.
     let adminId = null;
     let telegramId = null;
 
-    const { data: webUser } = await supabaseAdmin
-      .from("web_chat_users")
+    const { data: authUser } = await supabaseAdmin
+      .from("authorized_users")
       .select("admin_id, telegram_id")
-      .eq("id", authId)
+      .eq("web_user_id", authId)
       .maybeSingle();
 
-    if (webUser?.admin_id) {
-      adminId = webUser.admin_id;
-      telegramId = webUser.telegram_id || null;
+    if (authUser?.admin_id) {
+      adminId = authUser.admin_id;
+      telegramId = authUser.telegram_id || null;
     } else {
       // Treat the auth user as an admin (their id IS the admin_id)
       adminId = authId;
@@ -77,24 +77,24 @@ export async function POST(request) {
       );
     }
 
-    // 3. Persist to web chat history (analytics is logged by the Python service)
+    // 3. Persist to unified chat history
     if (conversationId) {
-      await supabaseAdmin.from("web_chat_messages").insert([
+      await supabaseAdmin.from("chat_messages").insert([
         {
           conversation_id: conversationId,
           user_id: authId,
-          telegram_id: telegramId,
           admin_id: adminId,
           role: "user",
           content: message,
+          platform: "web",
         },
         {
           conversation_id: conversationId,
           user_id: authId,
-          telegram_id: telegramId,
           admin_id: adminId,
           role: "assistant",
           content: aiResponse,
+          platform: "web",
         },
       ]);
     }

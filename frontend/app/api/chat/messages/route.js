@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// GET: Load messages for a conversation
+// GET: Load messages for a conversation (unified table)
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const conversationId = searchParams.get("conversationId");
@@ -13,7 +13,7 @@ export async function GET(request) {
   }
 
   const { data: messages, error } = await supabaseAdmin
-    .from("web_chat_messages")
+    .from("chat_messages")
     .select("*")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
