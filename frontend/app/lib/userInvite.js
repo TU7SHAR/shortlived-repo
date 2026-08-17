@@ -55,15 +55,15 @@ export async function createUserInvite(adminId, email, caption) {
       authUserId = created?.user?.id;
     }
 
-    // 3. Map the user to this admin (upsert)
-    await supabaseAdmin.from("web_chat_users").upsert(
+    // 3. Register this user in authorized_users (the unified user table)
+    await supabaseAdmin.from("authorized_users").upsert(
       {
-        id: authUserId,
+        web_user_id: authUserId,
         email: cleanEmail,
         admin_id: adminId,
-        role: "user",
+        is_banned: false,
       },
-      { onConflict: "id" }
+      { onConflict: "web_user_id" }
     );
 
     // 4. Create a Telegram invite token

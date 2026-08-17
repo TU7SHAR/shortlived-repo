@@ -4,8 +4,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 // GET: Resolve a logged-in user's chat context from their Supabase auth id.
-// Returns { adminId, role, telegramId } so /chat knows which tenant's
-// knowledge base to use.
+// Looks up authorized_users by web_user_id (the unified user table).
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const authId = searchParams.get("authId");
@@ -14,23 +13,23 @@ export async function GET(request) {
     return NextResponse.json({ error: "authId required" }, { status: 400 });
   }
 
-  // 1. Is this a mapped web-chat user (normal user invited by an admin)?
-  const { data: webUser } = await supabaseAdmin
-    .from("web_chat_users")
-    .select("admin_id, role, telegram_id")
-    .eq("id", authId)
+  // 1. Check authorized_users for this web_user_id
+  const { data: user } = await supabaseAdmin
+    .from("authorized_users")
+    .select("id, admin_id, telegram_id, web_user_id")
+    .eq("web_user_id", authId)
     .maybeSingle();
 
-  if (webUser?.admin_id) {
+  if (user?.admin_id) {
     return NextResponse.json({
-      adminId: webUser.admin_id,
-      role: webUser.role || "user",
-      telegramId: webUser.telegram_id || null,
+      userId: user.id,        // unified user id (uuid)
+      adminId: user.admin_id,
+      role: "user",
+      telegramId: user.telegram_id || null,
     });
   }
 
-  // 2. Otherwise, treat them as an admin (tenant owner). Their own auth id
-  //    IS the admin_id used across all tenant data.
+  // 2. Maybe they ARE an admin (their auth id = admin_id in invite_tokens)
   const { data: ownTokens } = await supabaseAdmin
     .from("invite_tokens")
     .select("id")
@@ -39,14 +38,16 @@ export async function GET(request) {
 
   if (ownTokens && ownTokens.length > 0) {
     return NextResponse.json({
+      userId: authId,
       adminId: authId,
       role: "admin",
       telegramId: null,
     });
   }
 
-  // 3. Fallback: an admin with no tokens yet still owns their own data
+  // 3. Fallback: treat as admin (own their own data)
   return NextResponse.json({
+    userId: authId,
     adminId: authId,
     role: "admin",
     telegramId: null,
