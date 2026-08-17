@@ -90,6 +90,10 @@ MODE_DIRECTIVES = {
 }
 
 
+# Modes that must work even when no documents are ingested yet.
+MODES_WITHOUT_KB = {"onboarding"}
+
+
 class ChatRequest(BaseModel):
     admin_id: str
     message: str
@@ -135,7 +139,8 @@ async def chat(req: ChatRequest):
     except Exception:
         constraint_block = ""
 
-    mode_directive = MODE_DIRECTIVES.get((req.mode or "assistant").lower(), "")
+    mode = (req.mode or "assistant").lower()
+    mode_directive = MODE_DIRECTIVES.get(mode, "")
     full_context = (
         (constraint_block + "\n\n" if constraint_block else "")
         + AI_RULES
@@ -155,8 +160,16 @@ async def chat(req: ChatRequest):
             .execute()
         )
         for f in (files_res.data or []):
-            category = f.get("category")
+            # Parity with handlers.py: files with no category recorded are
+            # treated as "Our Products" (the Telegram bot does the same via
+            # data.get('category', 'Our Products')). Without this default,
+            # every NULL-category file was silently dropped, which made the
+            # web chat report an empty knowledge base.
+            category = f.get("category") or "Our Products"
             if category not in VALID_CATEGORIES:
+                logger.info(
+                    f"Skipping file '{f.get('filename')}' — unrecognized category: '{category}'"
+                )
                 continue
             cards_res = (
                 supabase.table("condensed_knowledge_cards")
@@ -223,7 +236,9 @@ async def chat(req: ChatRequest):
         except Exception as e:
             logger.error(f"Vector search failed: {e}")
 
-    if not has_data:
+    # Onboarding is about the REP (name, role, experience, goals), not about
+    # product data, so it must never be blocked by an empty knowledge base.
+    if not has_data and mode not in MODES_WITHOUT_KB:
         return {"response": "The knowledge base is currently empty. Please ask an Admin to upload documents first."}
 
     # ── LLM (same provider engine + fallback) ──
@@ -245,7 +260,7 @@ async def chat(req: ChatRequest):
 
     # ── Log to analytics (parity with bot) ──
     # chat_analytics.mode only allows: normal | training | testing
-    analytics_mode = (req.mode or "assistant").lower()
+    analytics_mode = mode
     if analytics_mode not in ("training", "testing"):
         analytics_mode = "normal"
     try:

@@ -17,8 +17,11 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").lower()
 
 # Groq config
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_FALLBACK_MODELS = ["llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"]
+# NOTE: Every Llama/Gemma/Mixtral model was decommissioned by Groq. The names
+# below were verified against `client.models.list()` — do not reintroduce
+# llama-3.3-70b-versatile / llama-3.1-8b-instant / gemma2-9b-it / mixtral-8x7b-32768.
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b")
+GROQ_FALLBACK_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"]
 
 # Gemini config
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
