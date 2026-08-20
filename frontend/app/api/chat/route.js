@@ -50,6 +50,8 @@ export async function POST(request) {
     }
 
     // 2. Forward to the Python RAG engine (same brain as Telegram)
+    //    web_user_id is the Supabase auth UUID — needed for stateful
+    //    flows (onboarding, training, testing) that persist step state.
     let aiResponse;
     try {
       const pyRes = await fetch(PY_CHAT_URL, {
@@ -58,6 +60,7 @@ export async function POST(request) {
         body: JSON.stringify({
           admin_id: adminId,
           message,
+          web_user_id: authId,
           telegram_id: telegramId,
           mode: mode || "assistant",
         }),
