@@ -385,7 +385,9 @@ async def handle_training(req: ChatRequest, state: dict | None) -> dict:
     # LESSON 1: Our Products briefing
     if current_lesson == 0:
         if not our_product_files:
+            # No product files — skip to lesson 1 (competitors)
             metadata["current_lesson"] = 1
+            current_lesson = 1  # Update local var so we fall through to next check
         else:
             our_text = "\n".join([d["text"] for d in our_product_files.values() if d.get("text")])
             teach_prompt = (
@@ -408,12 +410,13 @@ async def handle_training(req: ChatRequest, state: dict | None) -> dict:
             except Exception as e:
                 logger.error(f"Training lesson 0 error: {e}")
                 return {"response": "Error generating product briefing. Type 'ok' to retry."}
-            return {"response": "Processing..."}
 
     # LESSON 2: Competitor intelligence
     if current_lesson == 1:
         if not competitor_files:
+            # No competitor files — skip to done
             metadata["current_lesson"] = 2
+            current_lesson = 2  # Update local var so we fall through to completion
         else:
             comp_text = "\n".join([d["text"] for d in competitor_files.values() if d.get("text")])
             our_text = "\n".join([d["text"] for d in our_product_files.values() if d.get("text")])
@@ -438,7 +441,6 @@ async def handle_training(req: ChatRequest, state: dict | None) -> dict:
             except Exception as e:
                 logger.error(f"Training lesson 1 error: {e}")
                 return {"response": "Error generating competitor briefing. Type 'ok' to retry."}
-            return {"response": "Processing..."}
 
     # DONE — training complete
     if current_lesson >= 2:
@@ -831,13 +833,21 @@ async def chat(req: ChatRequest):
             active_mode = state.get(TblUserStates.CURRENT_MODE)
 
     # Determine which handler to use:
-    # 1. If user is mid-flow (onboarding/training/testing), continue that flow
-    # 2. If frontend requests a new mode, start that flow
-    # 3. Otherwise, use assistant
+    # 1. If user is mid-test, they're LOCKED IN (same as Telegram)
+    # 2. If user explicitly requests a different mode, reset and start fresh
+    # 3. If user is mid-flow and sends same mode, continue
+    # 4. Otherwise, use assistant
     effective_mode = requested_mode
 
-    if active_mode in ("onboarding", "training", "testing"):
-        # User is mid-flow — honor it regardless of what frontend sends
+    if active_mode == "testing" and requested_mode != "testing":
+        # LOCKED IN — cannot exit mid-exam (same as Telegram)
+        effective_mode = "testing"
+    elif active_mode in ("onboarding", "training") and requested_mode != active_mode:
+        # User switched modes — reset their state so they can start fresh
+        update_web_user_state(req.web_user_id, mode="use", step=0, metadata={})
+        state = None  # Clear so the new handler treats this as first entry
+    elif active_mode in ("onboarding", "training", "testing") and requested_mode == active_mode:
+        # Continue the active flow
         effective_mode = active_mode
     elif requested_mode in ("onboarding", "training", "testing") and req.web_user_id:
         effective_mode = requested_mode
