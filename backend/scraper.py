@@ -101,7 +101,8 @@ def save_to_vector_db_complete(
     Returns: (success: bool, deduped_chunks: list, deduped_vectors: list)
     """
     try:
-        raw_chunks = text.split("\n\n")
+        from chunker import chunk_for_embedding
+        raw_chunks = chunk_for_embedding(text)
         chunks = [chunk.strip() for chunk in raw_chunks if len(chunk.strip()) > 10]
         
         if not chunks:
