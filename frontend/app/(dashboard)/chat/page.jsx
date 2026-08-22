@@ -52,7 +52,6 @@ export default function ChatPage() {
       const res = await fetch(`/api/chat/user?authId=${authUser.id}`);
       const data = await res.json();
       if (data.adminId) setAdminId(data.adminId);
-      if (data.userId) setAuthId(data.userId);
       setReady(true);
     };
     getUser();
