@@ -1,7 +1,8 @@
 """
-Primary chat LLM engine. Provider-agnostic (Groq or Gemini) via llm_client.
+Primary chat LLM engine — Gemini only.
+
 Function name `get_groq_response` is kept for backward compatibility with
-existing imports in handlers.py.
+existing imports in handlers.py and chat_api.py. It calls Gemini via llm_client.
 """
 
 import logging
@@ -22,7 +23,7 @@ SYSTEM_PROMPT = (
 
 
 async def get_groq_response(user_message: str, context: str, temperature: float = 0.3) -> str:
-    """Primary chat response. Uses whichever provider LLM_PROVIDER selects."""
+    """Primary chat response via Gemini. Name kept for backward compat."""
     MAX_CHARS = 110000
     if len(context) > MAX_CHARS:
         context = context[:MAX_CHARS] + "\n... [Context truncated to fit AI memory limits]"
@@ -40,9 +41,10 @@ async def get_groq_response(user_message: str, context: str, temperature: float 
             max_tokens=4096,
         )
 
-        final_answer = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
+        # Strip <think>...</think> blocks (some models output chain-of-thought)
+        final_answer = re.sub(r'<think>[\s\S]*?</think>', '', response, flags=re.DOTALL).strip()
 
-        # Strip markdown formatting — models often ignore prompt instructions about this
+        # Strip markdown formatting — models often ignore prompt instructions
         final_answer = re.sub(r'^#{1,6}\s*', '', final_answer, flags=re.MULTILINE)   # ## headers
         final_answer = re.sub(r'\*\*(.+?)\*\*', r'\1', final_answer)                  # **bold**
         final_answer = re.sub(r'\*(.+?)\*', r'\1', final_answer)                      # *italic*
