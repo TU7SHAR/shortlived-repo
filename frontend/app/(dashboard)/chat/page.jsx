@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import { clearUserCookies } from "@/app/actions/logout";
 import {
@@ -36,12 +36,59 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mode, setMode] = useState("assistant");
+  const [conversationId, setConversationId] = useState(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ new: "", confirm: "" });
   const [passwordMsg, setPasswordMsg] = useState(null);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // ─── Load or create conversation for the current mode ───
+  const loadConversation = useCallback(async (userId, userAdminId, activeMode) => {
+    if (!userId || !userAdminId) return;
+    try {
+      // Find existing conversation for this mode
+      const res = await fetch(`/api/chat/conversations?userId=${userId}`);
+      const data = await res.json();
+      const existing = (data.conversations || []).find(
+        (c) => c.mode === activeMode && c.platform === "web"
+      );
+
+      if (existing) {
+        setConversationId(existing.id);
+        // Load messages
+        const msgRes = await fetch(`/api/chat/messages?conversationId=${existing.id}`);
+        const msgData = await msgRes.json();
+        setMessages(
+          (msgData.messages || []).map((m) => ({
+            role: m.role,
+            content: m.content,
+            id: m.id,
+          }))
+        );
+      } else {
+        // Create new conversation for this mode
+        const createRes = await fetch("/api/chat/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            adminId: userAdminId,
+            title: MODES.find((m) => m.id === activeMode)?.label || "Chat",
+            mode: activeMode,
+          }),
+        });
+        const createData = await createRes.json();
+        if (createData.conversation) {
+          setConversationId(createData.conversation.id);
+        }
+        setMessages([]);
+      }
+    } catch (e) {
+      console.error("Failed to load conversation:", e);
+    }
+  }, []);
 
   useEffect(() => {
     const getUser = async () => {
@@ -51,20 +98,28 @@ export default function ChatPage() {
       setAuthId(authUser.id);
       const res = await fetch(`/api/chat/user?authId=${authUser.id}`);
       const data = await res.json();
-      if (data.adminId) setAdminId(data.adminId);
+      const resolvedAdmin = data.adminId || authUser.id;
+      if (data.adminId) setAdminId(resolvedAdmin);
       setReady(true);
+      // Load assistant conversation by default
+      await loadConversation(authUser.id, resolvedAdmin, "assistant");
     };
     getUser();
-  }, []);
+  }, [loadConversation]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const switchMode = (newMode) => {
+  const switchMode = async (newMode) => {
     setMode(newMode);
     setMessages([]);
+    setConversationId(null);
     setSidebarOpen(false);
+
+    // Load/create conversation for the new mode
+    await loadConversation(authId, adminId, newMode);
+
     // Auto-send a kickoff message for flows
     if (newMode === "onboarding") doSend("Start onboarding", newMode);
     else if (newMode === "training") doSend("Ready", newMode);
@@ -98,7 +153,12 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, authId, mode: activeMode }),
+        body: JSON.stringify({
+          message: text,
+          authId,
+          mode: activeMode,
+          conversationId,
+        }),
       });
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", content: data.response || data.error || "Something went wrong.", id: Date.now() + 1 }]);
@@ -133,7 +193,7 @@ export default function ChatPage() {
     <div className="flex h-screen bg-white overflow-hidden font-sans">
       {sidebarOpen && <div className="fixed inset-0 bg-slate-900/30 z-40 md:hidden backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />}
 
-      {/* Sidebar — minimal, Telegram-style */}
+      {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col transform transition-transform duration-200 md:relative md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="h-16 flex items-center gap-2.5 px-5 border-b border-slate-100 shrink-0">
           <div className="w-9 h-9 rounded-[10px] bg-blue-600 flex items-center justify-center shadow-sm">
@@ -143,7 +203,7 @@ export default function ChatPage() {
           <button onClick={() => setSidebarOpen(false)} className="md:hidden ml-auto text-slate-400 hover:text-slate-700"><X size={18} /></button>
         </div>
 
-        {/* Mode buttons — like Telegram's inline menu */}
+        {/* Mode buttons */}
         <div className="flex-1 px-3 pt-5 space-y-2">
           {MODES.map((m) => {
             const Icon = m.icon;
