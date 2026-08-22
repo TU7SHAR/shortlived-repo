@@ -1,10 +1,9 @@
 # ============================================================
 # SALESJI Backend - Minimal requirements (low-spec server safe)
 # ============================================================
-# Heavy ML stack (torch ~1.5GB, transformers, sentence-transformers,
-# faiss, langchain*, azure*, pandas, telethon, audio libs) has been
-# REMOVED. Local embeddings now run on fastembed (ONNX runtime, ~150MB)
-# producing the same all-MiniLM-L6-v2 384-dim vectors.
+# Embeddings use the Gemini API (gemini-embedding-001) instead of local
+# models. No ONNX, no torch, no local model downloads needed.
+# Vector dimension: 384 (matching existing pgvector schema).
 # ============================================================
 
 # --- Telegram bot (job-queue extra pulls APScheduler) ---
@@ -21,13 +20,8 @@ httpx==0.28.1
 # --- Config ---
 python-dotenv==1.2.2
 
-# --- LLM providers (switchable via LLM_PROVIDER) ---
-groq==0.37.1
+# --- LLM + Embeddings (Gemini only — Groq removed) ---
 google-genai==1.73.1
-
-# --- Local embeddings (lightweight, ONNX) ---
-# >=0.5.0 required for Python 3.13 support (older builds cap at <3.13)
-fastembed>=0.5.0
 
 # --- Clustering for website condensation ---
 numpy==2.4.4
