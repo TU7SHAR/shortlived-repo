@@ -501,13 +501,9 @@ class DataCondensationEngine:
     
     @staticmethod
     def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE) -> List[str]:
-        chunks = []
-        overlap = int(chunk_size * 0.1)
-        for i in range(0, len(text), chunk_size - overlap):
-            chunk = text[i:i + chunk_size]
-            if len(chunk) > 100:
-                chunks.append(chunk)
-        return chunks if chunks else [text]
+        """Smart semantic chunking — splits on natural boundaries, not fixed char count."""
+        from chunker import chunk_for_condensation
+        return chunk_for_condensation(text)
 
 # DATABASE INTEGRATION
 
@@ -584,7 +580,7 @@ class CondensationDatabaseManager:
                             record = {
                                 "admin_id": admin_id,
                                 "vector": embeddings[i],
-                                "embedding_model": "all-MiniLM-L6-v2",
+                                "embedding_model": "gemini-embedding-001",
                                 "source_text": chunk_text,
                                 "embedding_type": "standard"
                             }
@@ -687,7 +683,7 @@ class CondensationDatabaseManager:
                             record = {
                                 "admin_id": admin_id,
                                 "vector": anchor_embeddings[i],
-                                "embedding_model": "all-MiniLM-L6-v2",
+                                "embedding_model": "gemini-embedding-001",
                                 "source_text": filename,
                                 "anchor_text": anchor["embedding_text"],
                                 "embedding_type": "asymmetric",
