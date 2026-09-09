@@ -11,7 +11,7 @@
 **Project:** SalesJi — AI Sales Training Platform  
 **Environment:** Production  
 **Database:** Supabase (PostgreSQL + pgvector)  
-**PR:** [#16 — Enable RLS on all tables & replace permissive policies](https://github.com/TU7SHAR/shortlived-repo/pull/16)
+**PR:** #16 — Enable RLS on all tables & replace permissive policies
 
 ---
 

@@ -86,7 +86,7 @@ npm install -g pm2
 
 ```bash
 cd /root
-git clone https://github.com/TU7SHAR/TelegramBot.git salesji
+git clone <repository-url> salesji
 ```
 
 ### 5. Setup Backend
